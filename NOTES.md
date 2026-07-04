@@ -47,6 +47,31 @@ explicit "classes still mixed: X vs Y" phrasing.
 
 ## Reviews
 
+### 2026-07-04 — GEPA DeepSeek-pro run complete + two fixes (judge feedback, teacher swap)
+
+DeepSeek-v4-pro teacher run finished (700-call budget). Result judged against pre-registration:
+- **Reward: PASS.** Saved instruction = candidate 1 (geo-mean 0.761 vs 0.744 baseline, +0.017,
+  clears the +0.01 bar). Dominates baseline on BOTH tuning tasks (trec 0.701, sst2 0.825).
+- **Qualitative: PASS.** 4379-char structured instruction (sim 0.05 to baseline — a real rewrite,
+  not paraphrase), fully dataset-agnostic (no dataset/class-name leakage), not reward-hacked.
+- **Transfer gate: PENDING** — the decisive test (full method on held-out ag_news at -l, McNemar
+  vs baseline instruction) not yet run. +0.017 is on the tuning sets only.
+- **Diversity diagnosis (Lee's Q): not temperature (already 1.0).** Only 2 candidates accepted over
+  105 iters; candidate 1 found early (call 32), then ~100 non-improving near-duplicate proposals.
+  Cause: reflection model in reasoning mode converges regardless of temperature + likely reward
+  plateau near the encoder ceiling.
+
+Two fixes committed as a result:
+1. **Judge critique was being DISCARDED** — make_judge returned only the float score, so GEPA's
+   reflection LM saw only quantitative feedback (eff rank/artifacts/CV), never the judge's semantic
+   critique. Now the critique is piped into the reflection feedback and the judge signature elicits
+   actionable, instruction-level critique. Likely a real contributor to the proposal plateau.
+2. **Teacher is now configurable** (--teacher, --no-teacher-reasoning, --teacher-temp) with the
+   judge decoupled (--judge) so a teacher swap varies only that. Next experiment: teacher =
+   z-ai/glm-5.2 (Lee's pick), judge held at deepseek-pro, distinct --out. Confound to note: GLM
+   run also carries the improved judge feedback, so a clean teacher ablation would re-run deepseek
+   under the new feedback too; deferring that unless GLM's result is ambiguous.
+
 ### 2026-07-04 — GEPA run status (in flight, hourly check)
 
 Light-scale run live and healthy (~154/700 calls, 22 min, 149% CPU — thread cap holding,
