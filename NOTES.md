@@ -93,6 +93,30 @@ Two fixes committed as a result:
    run also carries the improved judge feedback, so a clean teacher ablation would re-run deepseek
    under the new feedback too; deferring that unless GLM's result is ambiguous.
 
+### 2026-07-04 — GEPA COMPLETE: good generic scaffolding, but sentiment-overfit examples
+
+Run finished: 15 iters, 14 candidates accepted, 516 metric calls, 4910-char instruction.
+Read the actual instruction (not just metrics):
+- **GEPA learned our reward's structure** — the instruction explicitly encodes effective rank /
+  avoid-paraphrases, avoid-surface-artefacts (length/punctuation/word-presence), cover-all-classes
+  from multiple angles, vary specificity, contrastive splits, target-minority-classes. The
+  granular boolean+coverage reward + judge critique clearly transmitted; this is a well-formed,
+  mostly-generic strategy prompt. Big step up from the old-reward run (2 candidates, thin edits).
+- **BUT it overfit its EXAMPLES to sst2/sentiment**: every illustration is review/sentiment —
+  class defs "negative: the reviewer expresses dislike", a literal SST-2 example "[negative] a
+  hokey piece", aspects "acting, pacing, soundtrack, plot", and an "emotional valence/affect"
+  angle that only helps sentiment. The scaffolding is generic; the content is domain-biased. This
+  is the same tuning-set overfit that shelved GEPA v1 (+5.4 TREC / -3.3 AG News), now visible in
+  the text rather than only in transfer numbers.
+- **Verdict vs pre-registration:** dataset-agnostic gate = QUALIFIED FAIL (generic principles, but
+  sentiment-leaked examples). Decisive test remains the -l ag_news TRANSFER gate — but that needs
+  the tuned instruction wired into the proposer/runner (not yet supported). If it transfers despite
+  the sentiment examples, adopt; if the examples drag topic-classification generation, don't.
+- **Cheap improvement idea (higher value than adopting as-is):** the sentiment leakage comes from
+  tuning on only trec+sst2. Re-tune with a 3rd, different-domain context (e.g. ag_news topic) held
+  IN, and keep a truly held-out dataset for the gate — the geometric-mean pressure should scrub
+  domain-specific examples. Or strip/greek the illustrative examples post-hoc.
+
 ### 2026-07-04 — GEPA run PRODUCTIVE under new reward (hourly check, 2h in)
 
 Checkpoint read (not just liveness): total_num_evals 444, iteration 13, **12 candidates accepted**
