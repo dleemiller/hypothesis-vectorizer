@@ -41,6 +41,9 @@ class LMConfig(BaseModel):
     # provider passthrough, e.g. {"provider": {"order": ["deepseek"], "allow_fallbacks": false}}
     # NOTE: part of the LM cache key — changing it invalidates cached proposals.
     extra_body: dict | None = None
+    # optional GEPA-tuned GeneratePool instruction (a saved dspy program json); overrides the
+    # hand-written GeneratePool docstring when set.
+    instruction_path: str | None = None
 
 
 class PoolConfig(BaseModel):

@@ -7,6 +7,8 @@ clone of the LM — the runaway cannot recur without thinking, and retry samples
 are always fresh.
 """
 
+from pathlib import Path
+
 import dspy
 from pydantic import BaseModel
 
@@ -91,6 +93,12 @@ class Proposer:
         self._retry_lm = None  # built on first failure
         self._generate = dspy.Predict(GeneratePool)
         self._refill = dspy.Predict(RefillPool)
+        if cfg.instruction_path:  # swap in a GEPA-tuned GeneratePool instruction
+            import json
+
+            tuned = json.loads(Path(cfg.instruction_path).read_text())["signature"]["instructions"]
+            self._generate.signature = self._generate.signature.with_instructions(tuned)
+            print(f"    proposer: using tuned instruction from {cfg.instruction_path}", flush=True)
 
     def generate(
         self, task: str, class_definitions: list[str], examples: list[str], n: int, avoid: list[str]
