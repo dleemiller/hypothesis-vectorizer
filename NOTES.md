@@ -93,6 +93,24 @@ Two fixes committed as a result:
    run also carries the improved judge feedback, so a clean teacher ablation would re-run deepseek
    under the new feedback too; deferring that unless GLM's result is ambiguous.
 
+### 2026-07-04 — Reward audited + rebuilt (all terms valuable, incremental), 3-domain re-tune launched
+
+Audited the reward on the completed run's 641-eval log — most terms were NOT valuable:
+cv_skill/min_coverage/mean_coverage mutually redundant (corr 0.93-0.97), raw diversity FOUGHT
+accuracy (corr -0.79), judge near-noise (corr +0.09, 9 distinct). Rebuilt (commit 3e371f1):
+- **Incremental weighted sum, no binary gates** (Lee: gates too binary): score =
+  (0.7*cv_skill + 0.3*judge)/norm - 0.2*hack_fraction. Every term moves the score smoothly.
+- cv_skill = accuracy value (also penalizes collapse implicitly -> diversity dropped from score,
+  kept in feedback). hack_fraction = incremental artifact subtraction (was a ~constant gate).
+- **Judge is now a positive reward TERM** (Lee: use judge results as part of reward, not just a
+  gate) AND cut to 6 SEMANTIC criteria the quantitative terms can't measure (surface-hacking,
+  label-leakage, class/angle coverage, contrast, vacuity); dropped format-compliance criteria the
+  LM always passes (the dead ones behind the near-noise). Per-criterion booleans now logged so each
+  can be audited/pruned next run. See [[feedback-llm-judge-booleans]].
+- Overfit fix: re-tune on 3 DOMAINS (trec question / sst2 sentiment / ag_news topic) so geometric-
+  mean pressure scrubs domain-specific examples (v1 baked in sst2/movie-review specifics). 20ng held
+  out for the transfer gate. Launched fresh: 105 train + 30 val, auto='light'. ~2h expected.
+
 ### 2026-07-04 — GEPA COMPLETE: good generic scaffolding, but sentiment-overfit examples
 
 Run finished: 15 iters, 14 candidates accepted, 516 metric calls, 4910-char instruction.
