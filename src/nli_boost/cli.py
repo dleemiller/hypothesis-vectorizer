@@ -109,39 +109,19 @@ def gepa_tune(
     tune: str = "trec:7,sst2:7",
     teacher: str = "openrouter/deepseek/deepseek-v4-pro",
     judge: str = "openrouter/deepseek/deepseek-v4-pro",
-    teacher_reasoning: bool = True,
-    teacher_temp: float = 1.0,
-    subsamples: int = 12,
-    max_calls: int = 700,
-    timeout_min: float = 90.0,
+    auto: str = "light",
     fresh: bool = False,
-    pool_size: int = 28,
-    sub_size: int = 400,
 ):
-    """Offline GEPA tuning of the GeneratePool instruction. `tune` = comma list of
-    dataset:seed contexts (hold out any dataset used for the accept gate). `teacher` is the
-    reflection model; --no-teacher-reasoning often diversifies proposals. Use a distinct --out
-    per experiment so runs don't clobber. Stops on max_calls/timeout/`touch <out>.stop`."""
+    """Offline GEPA tuning of the GeneratePool instruction (dspy auto budget). `tune` = comma
+    list of dataset:seed contexts (hold out any dataset used for the accept gate). `auto` is the
+    budget preset (light|medium|heavy). --fresh wipes this out's checkpoint before starting; else
+    re-running resumes. Ctrl-C to stop early (checkpointed)."""
     from .gepa_tune import optimize_instruction
 
     specs = [(p.split(":")[0], int(p.split(":")[1])) for p in tune.split(",")]
-    r = optimize_instruction(
-        out,
-        specs,
-        reflection_model=teacher,
-        judge_model=judge,
-        teacher_reasoning=teacher_reasoning,
-        teacher_temperature=teacher_temp,
-        subsamples=subsamples,
-        pool_size=pool_size,
-        sub_size=sub_size,
-        max_metric_calls=max_calls,
-        timeout_min=timeout_min,
-        fresh=fresh,
-    )
+    r = optimize_instruction(out, specs, reflection_model=teacher, judge_model=judge, auto=auto, fresh=fresh)
     console.print(f"[bold]baseline reward geo-mean:[/bold] {r['baseline_geo_mean']}")
     console.print(f"[bold]tuned instruction saved:[/bold] {r['saved_to']}")
-    console.print(f"[dim]stop early: touch {r['stop_file']}  |  resume: re-run this command[/dim]")
     console.print(f"\n[dim]{r['tuned_instruction']}[/dim]")
 
 

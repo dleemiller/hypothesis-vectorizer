@@ -25,12 +25,6 @@ from pathlib import Path
 import dspy
 import numpy as np
 from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
-from gepa.utils.stop_condition import (
-    FileStopper,
-    MaxMetricCallsStopper,
-    SignalStopper,
-    TimeoutStopCondition,
-)
 from pydantic import BaseModel
 
 from .cache import ScoreCache
@@ -219,104 +213,74 @@ def make_judge(judge_lm):
     return judge
 
 
+# Fixed, sensible internals (kept off the CLI on purpose — dspy's auto budget handles scale).
+_POOL_SIZE, _SUB_SIZE, _SUBSAMPLES = 28, 400, 24
+
+
 def optimize_instruction(
     out_path: Path,
     tune_specs,
     reflection_model="openrouter/deepseek/deepseek-v4-pro",
     judge_model="openrouter/deepseek/deepseek-v4-pro",
-    teacher_reasoning=True,
-    teacher_temperature=1.0,
+    auto="light",  # dspy GEPA budget preset: light | medium | heavy (sets metric-call budget)
     student_lm: LMConfig | None = None,
     encoder: EncoderConfig | None = None,
-    pool_size=28,
-    sub_size=400,
-    subsamples=12,  # contexts PER (dataset, seed) via resampling -> a non-degenerate valset
-    max_metric_calls=700,  # ~dspy auto="light" scale; most calls are valset re-scores
-    timeout_min=90.0,
     fresh=False,
     seed=7,
     cache_dir=Path("cache"),
 ) -> dict:
-    """Returns the tuned instruction. Validation pool = len(tune_specs) * subsamples contexts.
-
-    Stops on whichever comes first: max_metric_calls, timeout_min wall-clock, a
-    `touch <out>.stop` sentinel, or Ctrl-C/SIGTERM — all keep the best-so-far.
-    log_dir checkpoints every iteration, so re-running the SAME command resumes — unless
-    fresh=True, which wipes this out_path's checkpoint/eval-log/stop-file first (use when the
-    reward, context count, or datasets changed and a resume would mismatch).
-    """
+    """Canonical dspy.GEPA usage (see dspy.ai GEPA tutorial): auto budget preset, a LARGE trainset
+    and a SMALL valset (docs: smallest valset matching the task distribution, ~<=35). log_dir
+    checkpoints each iteration so re-running resumes; fresh=True wipes it first (use when the reward
+    or datasets changed and a stale checkpoint would mismatch)."""
     student_lm = student_lm or LMConfig()
     encoder = encoder or EncoderConfig()
     eval_log = out_path.with_suffix(".evals.jsonl")
     log_dir = out_path.parent / f"{out_path.stem}_gepa_logs"
-    stop_file = out_path.with_suffix(".stop")
-    if fresh:  # avoid the resume trap when reward/contexts changed (a stale checkpoint mismatches)
+    if fresh:
         import shutil
 
         shutil.rmtree(log_dir, ignore_errors=True)
         eval_log.unlink(missing_ok=True)
-        stop_file.unlink(missing_ok=True)
-        print("--- fresh: wiped checkpoint, eval log, and stop file for this run", flush=True)
-    examples, bundles = build_contexts(tune_specs, pool_size, sub_size, seed, n_subsamples=subsamples)
-    print(
-        f"--- GEPA contexts: {len(examples)} ({len(tune_specs)} datasets x {subsamples} subsamples)",
-        flush=True,
-    )
+        print("--- fresh: wiped checkpoint + eval log for this run", flush=True)
+
+    # Resample many contexts, then split into a large trainset + a small held-out valset.
+    allctx, bundles = build_contexts(tune_specs, _POOL_SIZE, _SUB_SIZE, seed, n_subsamples=_SUBSAMPLES)
+    order = np.random.default_rng(seed).permutation(len(allctx))
+    n_val = min(30, max(4, len(allctx) // 3))  # docs: valset <= ~35
+    valset = [allctx[i] for i in order[:n_val]]
+    trainset = [allctx[i] for i in order[n_val:]] or valset
+    print(f"--- GEPA: {len(trainset)} train + {len(valset)} val contexts, auto={auto!r}", flush=True)
 
     scorer = EntailmentScorer(encoder, ScoreCache(cache_dir / "nli_scores.sqlite"), CostTracker())
-    judge = (
-        make_judge(_make_lm(LMConfig(model=judge_model), cache=True, reasoning=False))
-        if judge_model
-        else None
-    )
+    judge = make_judge(_make_lm(LMConfig(model=judge_model), reasoning=False)) if judge_model else None
     metric = PoolRewardMetric(scorer, bundles, judge=judge, eval_log=eval_log)
+    baseline = _baseline_scores(valset, metric, student_lm)
 
-    baseline = _baseline_scores(examples, bundles, scorer, metric, student_lm)
-
-    # per-instruction checkpoint dir (NOT the shared models/gepa_logs, which holds the stale
-    # pre-rewrite tree-GEPA state). Same command re-runs resume from here unless fresh=True.
     log_dir.mkdir(parents=True, exist_ok=True)
-    # stop on whichever fires first; all return the best-so-far. MaxMetricCallsStopper
-    # is included because passing stop_callbacks overrides the built-in call cap.
-    stoppers = [
-        MaxMetricCallsStopper(max_metric_calls),
-        TimeoutStopCondition(timeout_min * 60.0),
-        FileStopper(str(stop_file)),
-        SignalStopper(),
-    ]
     dspy.configure(lm=_make_lm(student_lm))
-    # teacher (reflection) LM: reasoning-mode models converge on similar edits regardless of
-    # temperature, so reasoning=False is often the real diversity lever (see NOTES 2026-07-04).
-    refl_kwargs = {} if teacher_reasoning else {"extra_body": {"reasoning": {"enabled": False}}}
     gepa = dspy.GEPA(
         metric=metric,
-        reflection_lm=dspy.LM(
-            reflection_model, temperature=teacher_temperature, max_tokens=16000, **refl_kwargs
-        ),
-        max_metric_calls=max_metric_calls,
+        reflection_lm=dspy.LM(reflection_model, temperature=1.0, max_tokens=32000),
+        auto=auto,
+        num_threads=1,  # GPU scoring is lock-serialized; keep CPU serial too (no-OOM rule)
         track_stats=True,
-        num_threads=1,  # serial metric calls: one GPU-scoring + one capped CV at a time
-        log_dir=str(log_dir),  # checkpoints every iteration -> resumable on re-run
-        gepa_kwargs={"stop_callbacks": stoppers},
+        log_dir=str(log_dir),  # per-iteration checkpoints -> Ctrl-C then re-run resumes
     )
-    compiled = gepa.compile(dspy.Predict(GeneratePool), trainset=examples, valset=examples)
+    compiled = gepa.compile(dspy.Predict(GeneratePool), trainset=trainset, valset=valset)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     compiled.save(str(out_path))
     return {
         "baseline_geo_mean": baseline,
         "tuned_instruction": compiled.signature.instructions,
         "saved_to": str(out_path),
-        "stop_file": str(stop_file),
         "log_dir": str(log_dir),
     }
 
 
-def _baseline_scores(examples, bundles, scorer, metric, student_lm) -> float:
-    """Reward geo-mean of the CURRENT instruction — the bar GEPA must clear."""
+def _baseline_scores(contexts, metric, student_lm) -> float:
+    """Reward geo-mean of the CURRENT instruction on the valset — the bar GEPA must clear."""
     student = dspy.Predict(GeneratePool)
     student.set_lm(_make_lm(student_lm))
-    scores = []
-    for ex in examples:
-        pred = student(**{k: ex[k] for k in _INPUTS})
-        scores.append(metric(ex, pred).score)
+    scores = [metric(ex, student(**{k: ex[k] for k in _INPUTS})).score for ex in contexts]
     return round(geometric_mean(scores), 4)
