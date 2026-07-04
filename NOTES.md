@@ -93,6 +93,23 @@ Two fixes committed as a result:
    run also carries the improved judge feedback, so a clean teacher ablation would re-run deepseek
    under the new feedback too; deferring that unless GLM's result is ambiguous.
 
+### 2026-07-04 — VERDICT: tuned instruction EQUALS hand-written at -l (no improvement, no regression)
+
+trec_tuned_l (GEPA-tuned instruction + flash + -l): **0.9460 / F1 0.9244**. vs trec_pro_l
+(hand-written + pro + -l): 0.9460 / F1 0.9248. McNemar (compare tool): delta +0.002, discordant
+21 (10/11), **p=1.0 — statistically equivalent**. It did NOT under-perform, so the lexical-
+suppression contingency (tfidf variant) was not triggered; the tuned pool evolved fine (held-out to
+0.885) and the wh-word suppression concern didn't bite on TREC.
+- **Per the pre-registered adoption rule (significant improvement + transfer), the tuned instruction
+  is NOT adopted** — it matches, doesn't beat, the hand-written one. Consistent with the whole
+  session's finding: the hand-written GeneratePool prompt is already near the ceiling; the encoder is
+  the real lever (bounded-upside, flagged from the start).
+- Positive read: the tuned instruction + CHEAP flash matched the hand-written + expensive pro, and
+  the GEPA loop is now principled and reusable (grounded-boolean incremental reward, audited terms).
+- Caveats: TREC was in the tuning set (fit, not transfer) and proposer models differ (flash vs pro),
+  so not a clean instruction-only A/B. A held-out transfer test (20newsgroups) remains available but
+  equivalence on an in-tuning dataset already argues no adoption benefit.
+
 ### 2026-07-04 — Testing tuned instruction at -l; lexical-suppression hypothesis pre-registered
 
 3-domain re-tune finished (sentiment leakage much reduced: v1 saturated with positive/negative/
