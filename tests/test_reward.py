@@ -3,6 +3,12 @@ import numpy as np
 from nli_boost.reward import RewardConfig, effective_rank, geometric_mean, pool_reward
 
 
+def _informative(n, m, rng):
+    y = (rng.random(n) > 0.5).astype(int)
+    ent = np.column_stack([y * 0.6 + 0.2 + 0.15 * rng.random(n) for _ in range(m)]) + 0.3 * rng.random((n, m))
+    return y, np.hstack([ent, 1 - ent])
+
+
 def test_effective_rank_spans_collapsed_to_orthogonal():
     rng = np.random.default_rng(0)
     base = rng.random((200, 1))
@@ -17,51 +23,36 @@ def test_geometric_mean_craters_on_a_zero():
     assert geometric_mean([0.9, 0.9, 0.0]) < 0.05  # one tanked dataset vetoes the aggregate
 
 
-def test_reward_prefers_informative_diverse_pool():
+def test_reward_rewards_informative_over_noise():
     rng = np.random.default_rng(0)
     n, m = 300, 6
-    y = (rng.random(n) > 0.5).astype(int)
-    # informative+diverse: each entail col separates y with independent noise
-    ent_good = np.column_stack([y * 0.6 + 0.2 + 0.15 * rng.random(n) for _ in range(m)])
-    ent_good += 0.3 * rng.random((n, m))  # decorrelate
-    x_good = np.hstack([ent_good, 1 - ent_good])
-    # collapsed: one signal copied across all columns
-    sig = (y * 0.6 + 0.2 + 0.1 * rng.random(n))[:, None]
-    ent_bad = np.repeat(sig, m, axis=1) + 1e-3 * rng.random((n, m))
-    x_bad = np.hstack([ent_bad, 1 - ent_bad])
-    texts = ["a text here"] * n
-    pool = [f"hypothesis {i}" for i in range(m)]
-    cfg = RewardConfig(cv_seeds=2)
-    r_good = pool_reward(x_good, y, pool, texts, cfg)
-    r_bad = pool_reward(x_bad, y, pool, texts, cfg)
-    assert r_good["score"] > r_bad["score"]
-    assert r_good["effective_rank"] > r_bad["effective_rank"]
+    y, x_info = _informative(n, m, rng)
+    x_noise = np.hstack([(nz := rng.random((n, m))), 1 - nz])
+    pool, texts, cfg = [f"h{i}" for i in range(m)], ["t"] * n, RewardConfig(cv_seeds=2)
+    r_info = pool_reward(x_info, y, pool, texts, cfg)
+    r_noise = pool_reward(x_noise, y, pool, texts, cfg)
+    assert r_info["score"] > r_noise["score"]  # cv_skill (accuracy) drives the reward
+    assert r_info["cv_skill"] > r_noise["cv_skill"]
 
 
-def test_reward_flags_length_artifact():
+def test_judge_contributes_incrementally():
     rng = np.random.default_rng(1)
+    y, x = _informative(300, 6, rng)
+    pool, texts, cfg = [f"h{i}" for i in range(6)], ["t"] * 300, RewardConfig(cv_seeds=2)
+    r_hi = pool_reward(x, y, pool, texts, cfg, judge_score=1.0)
+    r_lo = pool_reward(x, y, pool, texts, cfg, judge_score=0.0)
+    assert r_hi["score"] > r_lo["score"]  # judge is a positive reward term, not just a gate
+    # incremental, not binary: a mid judge lands between the extremes
+    r_mid = pool_reward(x, y, pool, texts, cfg, judge_score=0.5)
+    assert r_lo["score"] < r_mid["score"] < r_hi["score"]
+
+
+def test_hack_fraction_lowers_reward_incrementally():
+    rng = np.random.default_rng(2)
     n = 200
     y = (rng.random(n) > 0.5).astype(int)
     texts = ["x" * int(v) for v in (50 + 100 * rng.random(n))]
     lengths = np.array([len(t) for t in texts], dtype=float)
-    ent = (lengths / lengths.max())[:, None] + 0.01 * rng.random((n, 1))  # tracks length
-    x = np.hstack([ent, 1 - ent])
-    r = pool_reward(x, y, ["hypothesis 0"], texts, RewardConfig(cv_seeds=2))
-    assert r["n_length_artifacts"] == 1
-    assert r["anti_hack_penalty"] < 1.0  # a length-tracking pool is penalized
-
-
-def test_reward_coverage_terms_present_and_ordered():
-    rng = np.random.default_rng(2)
-    n, m = 300, 4
-    y = (rng.random(n) > 0.5).astype(int)
-    # a pool that separates the classes should score higher coverage than pure noise
-    ent_sig = np.column_stack([y * 0.6 + 0.2 + 0.1 * rng.random(n) for _ in range(m)])
-    ent_noise = rng.random((n, m))
-    cfg = RewardConfig(cv_seeds=2)
-    r_sig = pool_reward(np.hstack([ent_sig, 1 - ent_sig]), y, [f"h{i}" for i in range(m)], ["t"] * n, cfg)
-    r_noise = pool_reward(
-        np.hstack([ent_noise, 1 - ent_noise]), y, [f"h{i}" for i in range(m)], ["t"] * n, cfg
-    )
-    assert 0.0 <= r_sig["min_coverage"] <= 1.0 and 0.0 <= r_sig["mean_coverage"] <= 1.0
-    assert r_sig["min_coverage"] > r_noise["min_coverage"]  # signal covers classes; noise does not
+    ent = (lengths / lengths.max())[:, None] + 0.01 * rng.random((n, 1))  # a length-tracking hypothesis
+    r = pool_reward(np.hstack([ent, 1 - ent]), y, ["h0"], texts, RewardConfig(cv_seeds=2), judge_score=1.0)
+    assert r["hack_fraction"] > 0.0  # the length artifact is detected and subtracted from the score

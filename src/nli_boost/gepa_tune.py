@@ -93,9 +93,10 @@ class PoolRewardMetric:
         if not pool:
             return ScoreWithFeedback(score=0.0, feedback="No usable hypotheses were produced.")
 
-        judge_score, judge_critique = self.judge(gold, pool) if self.judge else (None, "")
+        judge_score, judge_critique, judge_subs = self.judge(gold, pool) if self.judge else (None, "", {})
         x = self.scorer.features(texts, pool)  # cache-through; GPU on misses (runs concurrently)
         r = pool_reward(x, y, pool, texts, self.reward_cfg, judge_score=judge_score)
+        r["judge_criteria"] = judge_subs  # per-criterion booleans, logged so we can audit each
         feedback = f"[{gold.dataset}] {r['feedback']}"
         if judge_critique:  # the judge's SEMANTIC critique is the actionable signal for reflection
             feedback += f"\n\nJudge critique of this pool (what to fix): {judge_critique}"
@@ -116,32 +117,27 @@ class PoolRewardMetric:
 # the judge score = fraction true. Set-level (not per-hypothesis) keeps the output tiny (~18 bools +
 # one short line) so a judge call is fast — the continuous cv/coverage terms already give the reward
 # its fine granularity, so the judge needn't emit 28x per-hypothesis checks.
+# Only SEMANTIC criteria the quantitative reward terms CANNOT measure (audit 2026-07-04: the old
+# 18-criterion judge was near-noise — most were format-compliance the LM always passes, or things
+# cv/coverage/diversity already measure). These 6 each catch a distinct semantic defect that
+# held-out accuracy can miss (surface-hacking, label leakage, missing an angle/class, no contrast,
+# vacuity). Per-criterion booleans are logged so we can prune any that turn out dead/redundant.
 _SET_CRITERIA = {
-    "covers_all_classes": "every class, including minorities, has >=1 hypothesis aimed at it",
-    "targets_minority_classes": "there are deliberate hypotheses for the smaller/harder classes",
-    "fine_distinctions": "it distinguishes similar/confusable classes, not just broad groups",
-    "varied_specificity": "it mixes broad and narrow hypotheses rather than one granularity",
-    "angle_topic": "some hypotheses target topic/subject matter",
-    "angle_entity": "some target entities (people, places, orgs, objects)",
-    "angle_intent": "some target intent/purpose/function of the text",
-    "angle_syntax": "some target form/structure/phrasing cues",
-    "includes_contrastive": "it includes hypotheses that split GROUPS of classes apart",
-    "low_redundancy": "few near-duplicate/paraphrase hypotheses",
-    "mostly_semantic": "most are about content/meaning, not surface form (length, punctuation)",
-    "mostly_verifiable": "most are checkable from one text alone",
-    "mostly_discriminative": "few are vacuous / true of almost any text",
-    "mostly_specific": "most are concrete enough to be false for many texts",
-    "mostly_affirmative": "most are phrased affirmatively, not as negations",
-    "mostly_single_claim": "most express one property, not compound and/or claims",
-    "no_label_leakage": "none reference labels, the dataset, or classification",
-    "all_well_formed": "all are single declarative present-tense sentences about 'the text'",
+    "semantic_not_surface": "hypotheses are about MEANING, not surface tricks (word position, "
+    "punctuation, casing, length, exact word presence)",
+    "no_label_leakage": "no hypothesis references the class labels, the dataset, or the task itself",
+    "covers_every_class": "every class has at least one hypothesis clearly aimed at distinguishing it",
+    "multiple_semantic_angles": "hypotheses span several angles (topic, entity, intent, style), not one kind",
+    "has_contrastive": "includes hypotheses that separate GROUPS of classes, not only one-vs-rest",
+    "non_vacuous": "few hypotheses are tautological or true of almost any text",
 }
 
 
 def make_judge(judge_lm):
-    """Fast set-level boolean judge: ~18 yes/no questions about the whole set + ONE short line of
-    critique. Score = fraction of booleans true (grounded; no float scores). Concise output keeps
-    the call fast. Caller passes a no-reasoning LM."""
+    """Fast set-level boolean judge — only SEMANTIC criteria that the quantitative reward can't
+    measure. 6 yes/no questions + one short fix. Returns (fraction-true, detail, per-criterion dict);
+    the fraction feeds the reward's judge guard and the per-criterion booleans are logged for audit.
+    Grounded booleans (no float scores); concise output keeps it fast. Caller passes no-reasoning LM."""
     fields = {
         "task": (str, dspy.InputField()),
         "class_definitions": (list[str], dspy.InputField()),
@@ -155,9 +151,10 @@ def make_judge(judge_lm):
     )
     JudgePool = dspy.Signature(
         fields,
-        "Judge a set of NLI hypotheses used as features for a text classifier. Answer each yes/no "
-        "question about the WHOLE set, strictly and independently (when in doubt, false). Then give "
-        "ONE short sentence of the most useful fix for the GENERATOR'S INSTRUCTIONS. Be concise.",
+        "Judge a set of NLI hypotheses used as features for a text classifier, on SEMANTIC quality "
+        "only. Answer each yes/no question about the WHOLE set, strictly and independently (when in "
+        "doubt, false). Then give ONE short sentence of the most useful fix for the GENERATOR'S "
+        "INSTRUCTIONS. Be concise.",
     )
     predict = dspy.Predict(JudgePool)
     predict.set_lm(judge_lm)  # dspy.context is forbidden in GEPA worker threads
@@ -165,13 +162,13 @@ def make_judge(judge_lm):
     def judge(gold, pool):
         try:
             r = predict(task=gold.task, class_definitions=gold.class_definitions, hypotheses=pool)
-            passed = {c: bool(getattr(r, c, False)) for c in _SET_CRITERIA}
-            score = sum(passed.values()) / len(passed)
-            failed = [c for c, ok in passed.items() if not ok]
-            detail = f"judge {sum(passed.values())}/{len(passed)}; failing: {', '.join(failed) or 'none'}. {(r.fix or '').strip()}"
-            return score, detail
+            subs = {c: bool(getattr(r, c, False)) for c in _SET_CRITERIA}
+            score = sum(subs.values()) / len(subs)
+            failed = [c for c, ok in subs.items() if not ok]
+            detail = f"judge {sum(subs.values())}/{len(subs)}; failing: {', '.join(failed) or 'none'}. {(r.fix or '').strip()}"
+            return score, detail, subs
         except Exception:
-            return 0.5, ""
+            return 0.5, "", {}
 
     return judge
 

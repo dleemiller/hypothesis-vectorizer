@@ -1,28 +1,24 @@
-"""Composite pool-quality reward for instruction optimization (GEPA).
+"""Composite pool-quality reward for instruction optimization (GEPA). Honest: train-CV only.
 
-Scores a GENERATED pool (pre-evolution) on a frozen context. Every term encodes
-something the experiments taught us, and the whole thing is honest (train-CV
-only, test never touched):
+INCREMENTAL weighted sum of continuous terms — no binary gates, so GEPA always has a gradient
+(audit 2026-07-04 pruned the reward to terms that each add independent, non-redundant signal):
 
-- cv_skill   noise-AVERAGED held-out CV accuracy, normalized above majority.
-             Averaging over fold-seeds is load-bearing: a single 4-fold CV wobbles
-             ~0.003 from HistGBM thread-nondeterminism (measured 2026-07-04), so an
-             un-averaged reward lets the optimizer hack jitter. This is the primary term.
-- diversity  effective rank of the entailment columns / #hypotheses. Independent
-             separating directions are what GBDT converts into accuracy; this is the
-             explicit anti-collapse pressure (a label-paraphrase pool scores ~0.13,
-             a diverse pool ~0.40 on TREC).
-- anti_hack  1 - (fraction of hypotheses that track text length + fraction that are
-             near-constant/vacuous). Penalizes the two NLI reward-hacking channels
-             from diagnostics.py directly.
-- judge      optional LM semantic score (passed in), blind to the numbers above.
+    score = (cv_weight*cv_skill + judge_weight*judge) / norm  -  hack_weight*hack_fraction
 
-Per-dataset composite = weighted sum. Across datasets, aggregate with a GEOMETRIC
-mean so a candidate that tanks any single dataset craters (cross-dataset
-generalization pressure — the failure mode that shelved the first GEPA attempt).
+- cv_skill   noise-averaged held-out CV accuracy above majority (averaging beats the ~0.003 HGB
+             thread jitter). The value signal; also implicitly penalizes collapse (a collapsed
+             pool has few independent features -> low accuracy).
+- judge      the judge's semantic boolean-fraction — measures surface-hacking / label-leakage /
+             angle-coverage that accuracy alone can't see. A positive reward term, not a gate.
+- hack_frac  fraction of length-tracking or vacuous hypotheses, subtracted incrementally (catches
+             train-CV artifacts that cv_skill would otherwise reward).
+
+DROPPED from the score (audit): coverage terms (corr 0.93-0.97 with cv_skill — redundant) and raw
+diversity (corr -0.79 — fought accuracy); both kept in feedback only. Across datasets, aggregate
+with geometric_mean so a candidate that tanks any dataset craters (generalization pressure).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -36,18 +32,17 @@ class RewardConfig:
     cv_seeds: int = 3  # fold-seeds averaged to beat the ~0.003 CV noise floor
     cv_folds: int = 4
     cpu_threads: int = 4  # cap HGB's per-core OpenMP pool so it stays civil on a shared box
-    # Live, continuous terms only (anti_hack was always 1.0 -> now a penalty multiplier, not a
-    # weighted term). More discriminative terms => the reward separates near-identical pools
-    # instead of collapsing to a few values.
-    weights: dict = field(
-        default_factory=lambda: {
-            "cv_skill": 0.4,  # downstream CV accuracy above majority (primary target proxy)
-            "min_coverage": 0.2,  # worst-covered class's best single-hypothesis separation
-            "mean_coverage": 0.1,  # average per-class separation
-            "diversity": 0.15,  # effective rank / #hypotheses (independent directions)
-            "judge": 0.15,  # multi-dimensional LM rubric (averaged sub-scores)
-        }
-    )
+    # Reward = INCREMENTAL weighted sum of continuous terms (no binary gates — audit 2026-07-04):
+    #   score = cv_weight*cv_skill + judge_weight*judge_fraction - hack_weight*hack_fraction
+    # Every term moves the score smoothly, so GEPA always has a gradient. cv_skill is held-out
+    # accuracy (also implicitly penalizes collapse — a collapsed pool has few independent features
+    # and low accuracy, which is why explicit diversity was redundant/fighting: corr -0.79). judge
+    # is the semantic boolean-fraction (surface-hacking/leakage/angles accuracy can't see). hack is
+    # the fraction of length-tracking or vacuous hypotheses (catches train-CV artifacts cv rewards).
+    # Coverage/diversity are dropped from the score (redundant/fighting) and kept only in feedback.
+    cv_weight: float = 0.7
+    judge_weight: float = 0.3
+    hack_weight: float = 0.2  # subtracted, incrementally, per fraction of artifact hypotheses
     length_corr_thresh: float = 0.5
     const_std_thresh: float = 0.02
 
@@ -127,25 +122,18 @@ def pool_reward(
     m = len(pool)
     x_entail = x[:, :m]
 
-    cv_skill, cv_acc, cv_noise = _cv_skill(x, y, cfg)
+    cv_skill, cv_acc, cv_noise = _cv_skill(x, y, cfg)  # accuracy value (also penalizes collapse)
     eff = effective_rank(x_entail)
-    diversity = eff / max(1, m)
-    min_cov, mean_cov = _class_coverage(x_entail, y)
-    anti_hack, n_len, n_const = _anti_hack(x_entail, texts, cfg)  # penalty multiplier, not a term
+    diversity = eff / max(1, m)  # feedback only (dropped from score: redundant with / fights cv)
+    min_cov, mean_cov = _class_coverage(x_entail, y)  # feedback only
+    anti_hack, n_len, n_const = _anti_hack(x_entail, texts, cfg)
+    hack_frac = 1.0 - anti_hack  # incremental artifact penalty, not a gate
 
-    components = {
-        "cv_skill": cv_skill,
-        "min_coverage": min_cov,
-        "mean_coverage": mean_cov,
-        "diversity": diversity,
-    }
-    if judge_score is not None:
-        components["judge"] = float(judge_score)
-
-    w = {k: cfg.weights[k] for k in components}
-    wsum = sum(w.values()) or 1.0
-    base = sum(components[k] * w[k] for k in components) / wsum
-    score = base * anti_hack  # anti_hack is 1.0 unless real artifacts appear, then it bites
+    # incremental weighted sum: accuracy + semantic judge - artifact penalty (all continuous)
+    accuracy = cfg.cv_weight * cv_skill
+    semantic = cfg.judge_weight * float(judge_score) if judge_score is not None else 0.0
+    denom = cfg.cv_weight + (cfg.judge_weight if judge_score is not None else 0.0)
+    score = max(0.0, min(1.0, (accuracy + semantic) / denom - cfg.hack_weight * hack_frac))
 
     feedback = (
         f"Pool of {m} hypotheses. Held-out CV accuracy {cv_acc:.4f} "
@@ -173,12 +161,14 @@ def pool_reward(
     )
     return {
         "score": round(score, 4),
-        "components": {k: round(v, 4) for k, v in components.items()},
-        "anti_hack_penalty": round(anti_hack, 4),
+        "cv_skill": round(cv_skill, 4),
+        "judge": None if judge_score is None else round(float(judge_score), 4),
         "cv_accuracy": round(cv_acc, 4),
         "cv_noise": round(cv_noise, 4),
+        "hack_fraction": round(hack_frac, 4),
         "min_coverage": round(min_cov, 4),
         "mean_coverage": round(mean_cov, 4),
+        "diversity": round(diversity, 4),
         "effective_rank": round(eff, 2),
         "n_length_artifacts": n_len,
         "n_vacuous": n_const,
