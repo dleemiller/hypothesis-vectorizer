@@ -47,6 +47,27 @@ explicit "classes still mixed: X vs Y" phrasing.
 
 ## Reviews
 
+### 2026-07-04 — GLM-5.2 teacher run: WORSE than DeepSeek; + reward rebuilt (booleans)
+
+- **GLM-5.2 as teacher underperformed DeepSeek-pro.** 400 calls, returned the BASELINE instruction
+  unchanged (710 chars, best geo 0.745 ≈ baseline 0.744), explored less (3 distinct scores/dataset
+  vs DeepSeek's 5). DeepSeek found candidate 1 (geo 0.761, dominating, dataset-agnostic); GLM found
+  nothing above baseline. On this task DeepSeek-pro is the better reflection model.
+- **BIG caveat: both runs used the OLD reward** (single float judge, no coverage terms), which we
+  then replaced — so neither result is comparable to anything produced under the new reward, and
+  the teacher comparison should be re-confirmed under it. The DeepSeek candidate-1 transfer gate was
+  never run and is now moot (old reward).
+- **Reward rebuilt for granularity (Lee's direction):** (1) judge switched from a float score to a
+  16-criterion BOOLEAN rubric (10 per-hypothesis + 6 set-level), reward = fraction of booleans
+  passing — LLMs can't ground continuous scores (they collapse to a few anchors; the old float
+  judge gave ~5 distinct reward values across hundreds of evals). Granularity now comes from the
+  QUANTITY of booleans (~280 levels for a 28-hyp pool). (2) added continuous per-class coverage
+  (min/mean best single-hypothesis separation) so near-identical pools are still distinguished.
+  (3) dead always-1.0 anti_hack term → penalty multiplier. See [[feedback-llm-judge-booleans]].
+- **Next:** fresh GEPA run under the new reward (DeepSeek-pro teacher, the winner) before any
+  adoption/transfer decision. Prior candidate instructions and all reward numbers above are
+  old-reward artifacts.
+
 ### 2026-07-04 — GEPA DeepSeek-pro run complete + two fixes (judge feedback, teacher swap)
 
 DeepSeek-v4-pro teacher run finished (700-call budget). Result judged against pre-registration:
