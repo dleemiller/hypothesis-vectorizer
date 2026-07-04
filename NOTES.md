@@ -47,6 +47,37 @@ explicit "classes still mixed: X vs Y" phrasing.
 
 ## Reviews
 
+### 2026-07-04 — hourly: plateau-epsilon tune REFUTED by trajectory calibration (no code change)
+
+Pre-registered expectation (from the backlog): held-out crept +1e-4/round forever, so the plateau
+epsilon (hardcoded 1e-4 at evolve.py:264) should be raised above the round noise (~0.003) to stop
+the loop wasting rounds. **Tested offline on all 10 evolved runs' log.jsonl held-out trajectories
+(free, no GPU) — and the premise is wrong.** Decision rule set before looking at candidate epsilons:
+adopt only if a raised epsilon stops early WITHOUT sacrificing >0.003 held-out on any run.
+
+- **Round noise floor, measured for free:** trec rounds 2-4 have IDENTICAL pools (0 prunes, 0
+  refills) yet held-out reads 0.8639 → 0.8627 → 0.8652 — a ±0.003 wobble from HistGBM OpenMP
+  thread-nondeterminism (float reduction order), not signal. So 1e-4 is 30× below the noise; the
+  plateau check treats jitter as improvement and runs to the round cap. That part of the premise holds.
+- **But improvements are non-monotonic with real LATE JUMPS, not a creep.** Simulating evolve()'s
+  stop logic over the logged accs:
+  - trec_pro_l (-l, the run that genuinely climbs): +0.0012, +0.0013, **+0.010 (round 3)**, ... —
+    eps=0.003/patience=2 stops after round 2 at 0.8864, cutting the jump to 0.8964. **−0.0087 lost.**
+  - ag_news: +0.0013, **−0.0063 (dip)**, **+0.0125 (round 3)**, ... — eps=0.003 stops after round 2
+    at 0.8625, missing the climb to 0.8788. **−0.0163 lost.**
+  The real gains arrive at round 3 AFTER a stagnant/declining round 2. Any epsilon big enough to
+  beat the noise (≥0.002) + patience 2 cuts these jumps. Raising epsilon HURTS exactly the runs
+  evolution helps. **Refuted; epsilon stays 1e-4 / run-to-cap.**
+- The only strictly-safe stop is "pool static (0 prunes AND 0 refills) for patience rounds" — a
+  frozen pool cannot jump, so remaining variation is provably noise. But that triggers only on trec
+  (saves rounds 2-4, which are cache-hit CPU re-ranking, ~seconds) and correctly never fires on
+  ag_news/trec_pro_l (pool changing every round). Savings are the cheap rounds; the expensive
+  refill rounds are exactly the productive ones. Not worth the added branch + validation run.
+- **Refines the "evolution not significant (p=0.644)" finding:** evolution's gains are real but
+  small and concentrated in one or two rounds, swamped by 500-example test noise at -m. The place
+  it clearly pays is -l (trec_pro_l round-3 +0.010 held-out) — consistent with encoder-relative
+  saturation. Backlog item closed as refuted; script kept at scratchpad/plateau.py.
+
 ### 2026-07-04 — peer method-doc (bsmith) cross-read + significance testing added
 
 Read an independent method doc on the same problem (frozen NLI encoder + LM-written
