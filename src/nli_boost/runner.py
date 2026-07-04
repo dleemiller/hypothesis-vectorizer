@@ -30,6 +30,21 @@ def _phase(msg: str) -> None:
     print(f"--- {msg}", flush=True)
 
 
+def build_matrices(cfg: RunConfig, scorer, bundle, pool: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Train/test feature matrices for a pool: hypothesis features plus the optional
+    lexical channel (fit on TRAIN ONLY). Shared by the runner and `compare` so both
+    reconstruct a run's exact representation identically."""
+    x_train = scorer.features(bundle.train_texts, pool)
+    x_test = scorer.features(bundle.test_texts, pool)
+    if cfg.lexical.kind != "none":
+        from .lexical import LexicalFeaturizer
+
+        lex = LexicalFeaturizer(cfg.lexical, cfg.seed).fit(bundle.train_texts)
+        x_train = np.concatenate([x_train, lex.transform(bundle.train_texts)], axis=1)
+        x_test = np.concatenate([x_test, lex.transform(bundle.test_texts)], axis=1)
+    return x_train, x_test
+
+
 def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -> dict:
     out_dir = cfg.runs_dir / cfg.run_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -57,15 +72,9 @@ def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -
     # STAGE 3 — CV-selected head on the full train split; the optional lexical
     # channel (fit on TRAIN ONLY) is concatenated here and only here
     _phase(f"fitting CV-selected head on {len(bundle.train_texts)} texts x {len(pool)} hypotheses")
-    x_train = scorer.features(bundle.train_texts, pool)
-    x_test = scorer.features(bundle.test_texts, pool)
     if cfg.lexical.kind != "none":
-        from .lexical import LexicalFeaturizer
-
-        lex = LexicalFeaturizer(cfg.lexical, cfg.seed).fit(bundle.train_texts)
         _phase(f"concatenating lexical channel: {cfg.lexical.kind} ({cfg.lexical.dims} dims)")
-        x_train = np.concatenate([x_train, lex.transform(bundle.train_texts)], axis=1)
-        x_test = np.concatenate([x_test, lex.transform(bundle.test_texts)], axis=1)
+    x_train, x_test = build_matrices(cfg, scorer, bundle, pool)
     head, head_params, cv_acc = cv_selected_head(x_train, bundle.y_train, cfg.seed)
 
     # STAGE 4 — one test evaluation; pool_cv is the only headline

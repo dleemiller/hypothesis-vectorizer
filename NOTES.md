@@ -47,6 +47,53 @@ explicit "classes still mixed: X vs Y" phrasing.
 
 ## Reviews
 
+### 2026-07-04 — peer method-doc (bsmith) cross-read + significance testing added
+
+Read an independent method doc on the same problem (frozen NLI encoder + LM-written
+hypotheses). Extracted what's additive, what we already have, and what we jointly falsified.
+
+- **Style-partitioned generation (their headline +2.2 pts): targets a deficiency we don't have.**
+  Their claim is that ONE general prompt mode-collapses onto label paraphrases (effective rank
+  8.3/64, 10 near-dup feature pairs |corr|>0.9); splitting the same call budget across 5 style
+  prompts de-collapses it (10.3/64, 5 pairs) for +2.2. Measured OUR pools (P(entail) columns,
+  cache-only): trec_pool **22.9/64 (3 near-dups)**, ag_news_pool **27.1/64 (0)**, sst2_pool
+  15.6/64 (0). Our `GeneratePool` prompt already bakes in the diversity instruction their general
+  prompt lacked ("cover every class from multiple angles… contrastive hypotheses… vary
+  specificity"), so we sit ~2.8× less collapsed than the baseline their win recovers from. Their
+  mechanism doesn't apply to us. NOT adopting; measurement recorded so we don't chase it later.
+- **Significance discipline (McNemar + discordant counts + CIs): the real import — adopted.** We
+  reported seed bands (across-fit variance) but never a paired test on a FIXED test set. Built
+  `nli-boost compare runA runB` (src/compare.py): reconstructs both runs' test predictions from
+  the NLI cache + saved head params (falls back to the CV grid for pre-head-saving runs), exact
+  binomial McNemar on discordant pairs, Wilson CIs, refuses mismatched test sets. Applied it to
+  three A/Bs we'd never significance-checked:
+
+  | comparison | Δacc | discordant (A-only / B-only) | McNemar p | verdict |
+  |---|---|---|---|---|
+  | evolution vs static pool (TREC, n=500) | +0.008 | 42 (19 / 23) | 0.644 | **not significant** |
+  | lexical on/off (AG News, n=2000) | +0.0075 | 55 (20 / 35) | 0.058 | not significant (borderline) |
+  | lexical on/off (TREC frozen pool, n=500) | −0.002 | 23 (12 / 11) | 1.000 | not significant |
+
+  - **The evolution result is the one that stings:** on TREC-500 the whole evolve loop (prune +
+    refill) does NOT beat the raw generated pool at p<0.05 — it fixes 23 test items and breaks 19.
+    Consistent with the measured saturation (-m saturates ~round 2) and with our own finding that
+    generation, not selection, is the lever. Does NOT mean evolution is worthless (it earns its
+    keep at -l where the encoder can measure deeper, and on harder datasets), but on easy/small
+    test sets its headline gain is inside the noise floor. This is exactly the sub-standard-error
+    "win" the peer doc warns about, and we now have the instrument to catch it going forward.
+  - **Lexical AG News p=0.058 refines last cycle's verdict:** the +0.75 pt gain is borderline, not
+    clean — 35 items fixed vs 20 broken, just shy of significance on 2000 test examples. Strengthens
+    "optional macro-F1 channel, not a default." The TREC lexical A/B is flatly null (p=1.0).
+- **Jointly falsified (independent confirmation):** their overgenerate-2N + MMR/diversity selection
+  is dead at 2× cost — matches our mRMR≈importance-only finding. Their reflection saturates ~round
+  2 with a val-gate — matches our plateau/patience early-stop. Two labs, same negatives.
+
+Action items surfaced: (1) going forward, every single-run A/B verdict should carry a McNemar p,
+not just a point delta — retro-applying it already downgraded two "wins" to noise. (2) The
+evolution-not-significant-on-TREC result argues for testing the loop where it should matter (harder
+datasets, -l encoder) rather than assuming the +0.8 is real. (3) `report` could optionally show
+Wilson CIs next to each accuracy so the noise floor is always visible.
+
 ### 2026-07-04 — lexical verdicts: tfidf mixed (F1 +1.4), wordllama dominated
 
 - trec_lex_wordllama: 0.9100 / F1 0.8895 — worse than tfidf_svd on every axis. Mechanism:

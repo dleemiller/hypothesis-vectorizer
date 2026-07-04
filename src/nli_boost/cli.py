@@ -79,5 +79,29 @@ def diagnose(run_dir: Path):
     console.print(f"suspected label noise: {n} confident errors | full report: {run_dir}/diagnostics.json")
 
 
+@app.command()
+def compare(run_a: Path, run_b: Path):
+    """Paired McNemar test: is run_b's accuracy difference from run_a real or noise?"""
+    from .compare import compare_runs
+
+    r = compare_runs(run_a, run_b)
+    mc = r["mcnemar"]
+    console.print(
+        f"[bold]{r['run_a']}[/bold] {r['acc_a']:.4f} {r['ci_a']}  vs  "
+        f"[bold]{r['run_b']}[/bold] {r['acc_b']:.4f} {r['ci_b']}   "
+        f"({r['dataset']} seed {r['seed']}, n={r['n_test']})"
+    )
+    console.print(
+        f"delta {r['delta_b_minus_a']:+.4f}  |  discordant {mc['discordant']} "
+        f"(A-only {mc['b_only_A']}, B-only {mc['c_only_B']})  |  McNemar p={mc['p_value']:.4f}"
+    )
+    verdict = (
+        "[green]significant[/green] (p<0.05)"
+        if r["significant_at_05"]
+        else "[yellow]not significant[/yellow] — within noise"
+    )
+    console.print(f"verdict: {verdict}")
+
+
 if __name__ == "__main__":
     app()

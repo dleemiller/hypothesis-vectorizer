@@ -105,6 +105,10 @@ head.fit(X_train, y_train)                     # best-of-6-on-test inflated us +
 report(head.score(features(D_test, pool)))     # one test evaluation, pool_cv is the headline
 audit(pool, head)        # reward-hacking checks: val-gain collapse, length correlation
 diagnose(pool, head)     # error decomposition: coverage gap / redundancy / fit gap / label noise
+# Any two runs on the SAME test set: paired McNemar (exact binomial on discordant
+# pairs) + Wilson CIs. Seed bands catch across-fit variance; this catches whether a
+# single-run A/B delta clears the noise floor. Measured caution: on TREC-500 the
+# evolve loop's +0.8 over the static pool is p=0.644 — inside the noise.
 
 
 # ============================================================================

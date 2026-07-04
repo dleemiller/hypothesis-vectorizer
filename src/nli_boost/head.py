@@ -40,6 +40,16 @@ def cv_selected_head(x: np.ndarray, y: np.ndarray, seed: int, folds: int = 4):
     return head, _GRID[best_i], cv_acc
 
 
+def fit_head(params: dict, x: np.ndarray, y: np.ndarray, seed: int):
+    """Fit exactly the head a run already selected (skips re-running the CV grid).
+
+    cv_selected_head is deterministic, so refitting the saved params reproduces
+    the reported head at a fraction of the cost — used by post-hoc tools."""
+    head = _build(params, seed)
+    head.fit(x, y)
+    return head
+
+
 def evaluate(y_true: np.ndarray, proba: np.ndarray, n_classes: int) -> dict:
     pred = proba.argmax(axis=1)
     return {

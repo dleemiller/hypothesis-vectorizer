@@ -24,6 +24,7 @@ uv run nli-boost run configs/trec.yaml            # full method: generate -> evo
 uv run nli-boost run configs/trec_finalize_l.yaml # reuse a fitted pool, re-score with -l encoder
 uv run nli-boost report                           # pool_cv results across runs
 uv run nli-boost diagnose runs/trec               # error decomposition + reward-hacking flags
+uv run nli-boost compare runs/a runs/b            # paired McNemar: is a delta real or noise?
 ```
 
 Artifacts per run in `runs/<run_name>/`: the pool itself (`model.json` — the model is a list of
