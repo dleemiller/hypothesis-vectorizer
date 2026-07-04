@@ -54,17 +54,24 @@ def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -
         _phase(f"evolving (cap {cfg.pool.rounds} rounds, patience {cfg.pool.patience})")
         pool, history = evolve(bundle, pool, scorer, proposer, deduper, cfg.pool, cfg.seed)
 
-    # STAGE 3 — CV-selected head on the full train split
+    # STAGE 3 — CV-selected head on the full train split; the optional lexical
+    # channel (fit on TRAIN ONLY) is concatenated here and only here
     _phase(f"fitting CV-selected head on {len(bundle.train_texts)} texts x {len(pool)} hypotheses")
     x_train = scorer.features(bundle.train_texts, pool)
+    x_test = scorer.features(bundle.test_texts, pool)
+    if cfg.lexical.kind != "none":
+        from .lexical import LexicalFeaturizer
+
+        lex = LexicalFeaturizer(cfg.lexical, cfg.seed).fit(bundle.train_texts)
+        _phase(f"concatenating lexical channel: {cfg.lexical.kind} ({cfg.lexical.dims} dims)")
+        x_train = np.concatenate([x_train, lex.transform(bundle.train_texts)], axis=1)
+        x_test = np.concatenate([x_test, lex.transform(bundle.test_texts)], axis=1)
     head, head_params, cv_acc = cv_selected_head(x_train, bundle.y_train, cfg.seed)
 
     # STAGE 4 — one test evaluation; pool_cv is the only headline
     _phase("evaluating on test (once)")
     results = {
-        "pool_cv": evaluate(
-            bundle.y_test, head.predict_proba(scorer.features(bundle.test_texts, pool)), bundle.n_classes
-        ),
+        "pool_cv": evaluate(bundle.y_test, head.predict_proba(x_test), bundle.n_classes),
         "cv_train_accuracy": round(cv_acc, 4),
     }
 

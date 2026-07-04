@@ -47,6 +47,86 @@ explicit "classes still mixed: X vs Y" phrasing.
 
 ## Reviews
 
+### 2026-07-04 — lexical channel experiments (Lee's idea), pre-registered
+
+Static lexical features concatenated with hypothesis features at the head stage (flag-gated,
+fit-on-train-only, evolution untouched). Both runs REUSE runs/trec's exact pool — the only
+variable is the channel. Motivation: TF-IDF standalone = 0.828 TREC / 0.565 20NG; if
+complementary to NLI features, concat pays.
+- trec_lex_tfidf_svd (TF-IDF → SVD 128) and trec_lex_wordllama (static embeddings, 128 dims)
+- Baseline: trec pool_cv 0.9200. Registered: complementary → 0.925-0.94; subsumed → ~0.92.
+  Adoption rule: ≥ +1 pt on 2+ datasets before it enters METHOD.md; AG News (0.890 wall) is
+  the negative control to run next if TREC is positive.
+- Follow-up idea noted: include the lexical channel in evolution's fold models so confusion
+  evidence targets what lexical can't already solve.
+
+### 2026-07-04 review #46 (cron) — idle; qualitative check of trec_pro_l pool
+
+- Nothing running. trec_pro_l pool read: the pro proposer produces the same semantic+wh-word
+  mix as flash ("The text asks for the full form of an initialism.", "begins with 'Who'") —
+  consistent with proposer quality not being the binding variable; the -l gain came from the
+  encoder. Head chosen: HistGBM lr=0.12 l2=0.3 (heavier regularization at -l — CV adapting).
+- All work complete and judged. The 15-minute review cron is now redundant with the hourly
+  improvement cron and can be deleted.
+
+### 2026-07-04 — ALL REGISTERED BANDS HIT: method cross-validated + maxed run
+
+- Cross-dataset (committed code, honest protocol): ag_news 0.8910/0.8895 (band 0.885-0.895 ✓,
+  seed spread 0.15 pts), sst2 0.9404/0.9404 (band 0.94-0.95 ✓, identical across seeds),
+  trec 0.9200 (band ✓; pre-rewrite seeds 0.916/0.938). External validity CONFIRMED.
+- **trec_pro_l (pro proposer / large STS / -l encoder): 0.9460 / F1 0.9248** (band 0.93-0.96 ✓),
+  26 min, $0.07, 0 abnormal. Matches the old -l re-score (0.946) with a fully fresh native pool.
+- **New scaling-law observation:** with -l, evolution did NOT saturate — held-out climbed through
+  round 4 (0.884→0.898) with productive prune/refill every round, vs -m's collapse by round 3.
+  The generation well is as deep as the encoder can measure: saturation is encoder-relative.
+  This upgrades the METHOD.md scaling story and motivates the two-encoder union experiment.
+- Day complete: idea → method → measured defects → fixed loop → pre-registered validation →
+  replication → clean commit (f5e205f) → cross-dataset + maxed confirmation.
+
+### 2026-07-03 review #45 (cron) — first cross-dataset verdict
+
+- **ag_news s7: pool_cv 0.8910 / F1 0.8911 — INSIDE the registered 0.885-0.895 band.** The
+  AG News label-noise ceiling holds under the committed code; the old protocol was not masking
+  headroom. cv_train 0.8935 consistent. ag_news_s17 running; sst2 pair + trec_pro_l behind.
+
+### 2026-07-03 review #44 (cron)
+
+- Cross-dataset batch on committed code: ag_news (s7) mid-evolution, heldout ~0.867-0.869,
+  small confident-death counts (6/1/6) — behaving like the pre-rewrite runs. Three runs +
+  trec_pro_l chained behind. No stalls, nothing completed to judge yet.
+
+### 2026-07-03 — trec_pro_l queued (Lee: "the test with pro / large / large")
+
+Maxed configuration on the committed method: deepseek-v4-pro proposer, ModernCE-large STS,
+finecat-nli-l encoder, TREC-6 seed 7. Pre-registered: band 0.93-0.96 (deliberately stacks
+encoder + proposer levers — a "what does the method deliver maxed" number, not a lever
+isolation; the -l re-score of an -m pool previously measured 0.946). Est. 60-90 min (-l is
+~5x slower per pair, GPU shared with Lee's training). Chained behind the cross-dataset batch.
+Hourly improvement cron armed (8dd3e10a, minute :43, session-only, 7-day expiry).
+
+### 2026-07-03 — COMMITTED PACKAGE VALIDATED: pool_cv 0.920 on TREC
+
+- Fresh pool, fresh LM calls, committed code: **0.920 / F1 0.882** — inside the 0.916-0.938
+  pre-rewrite band. $0.01, 10 min, 0 abnormal. Head chosen: HistGBM lr=0.06 l2=0.01 (not RF —
+  the CV grid picks per-pool). Port is behaviorally faithful.
+- Qualitative: fresh pool mixes semantic and wh-word lexical hypotheses as before; "The text is
+  a question." survived (vacuous on TREC — everything is a question — should be
+  scores-constant... verify: likely near-constant but not < 0.02 std; diagnostics will show if
+  it carries weight). Two tuning notes for later, not churned now: (1) plateau epsilon 1e-4 is
+  finer than round-to-round noise — held-out crept +0.0087 over 6 rounds and patience never
+  fired (rounds 2-4 pruned/refilled 0, so the extra rounds were nearly free but pointless);
+  (2) consider dropping always-true statements at generation time via a variance check.
+- Next: re-run cross-dataset validation (ag_news, sst2 × seeds) on the committed package.
+
+### 2026-07-03 review #43 (cron) — post-commit validation run in flight
+
+- Rewrite committed and pushed (f5e205f, 29 files): clean METHOD.md implementation, 11 fake-based
+  tests, ruff + pre-commit, minimal configs; old code archived untracked in src-bak/.
+- Real end-to-end validation of the committed package running on TREC (fresh LM calls — new
+  prompts don't hit the old cache). Process healthy: GPU-resident, active LM connections; output
+  silence is grep block-buffering on sparse phase prints (noted footgun; next launches go to a
+  log file directly). Expected band per prior seeds: pool_cv 0.91-0.94.
+
 ### 2026-07-03 review #42 (cron)
 
 - ag_news_evolve3_s7 mid-run: heldout 0.881 → 0.868 → 0.891 (noisier trajectory than TREC),

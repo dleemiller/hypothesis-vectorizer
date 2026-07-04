@@ -54,6 +54,13 @@ class PoolConfig(BaseModel):
     from_run: str | None = None
 
 
+class LexicalConfig(BaseModel):
+    """Optional static lexical channel concatenated with hypothesis features."""
+
+    kind: Literal["none", "tfidf_svd", "wordllama"] = "none"
+    dims: int = 128
+
+
 class RunConfig(BaseModel):
     run_name: str
     seed: int = 7
@@ -62,6 +69,7 @@ class RunConfig(BaseModel):
     sts: StsConfig = StsConfig()
     lm: LMConfig = LMConfig()
     pool: PoolConfig = PoolConfig()
+    lexical: LexicalConfig = LexicalConfig()
     cache_dir: Path = Path("cache")
     runs_dir: Path = Path("runs")
 
