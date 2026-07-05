@@ -106,6 +106,16 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
 
     # -- sklearn API ---------------------------------------------------------
 
+    def __sklearn_tags__(self):
+        # a text transformer: consumes a 1-D column of strings, not 2-D numeric arrays,
+        # and needs no y at transform time (same shape as TfidfVectorizer's tags)
+        tags = super().__sklearn_tags__()
+        tags.input_tags.string = True
+        tags.input_tags.one_d_array = True
+        tags.input_tags.two_d_array = False
+        tags.target_tags.required = False
+        return tags
+
     def fit(self, X=None, y=None):
         """Fix the hypothesis set. If `hypotheses` was given it is used as-is (pure transformer,
         no LM — X/y ignored). If not, the hypotheses are GENERATED from (X, y) via the LM proposer,

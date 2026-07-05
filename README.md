@@ -87,6 +87,10 @@ FeatureUnion([("nli", HypothesisVectorizer(hyps)),
 `cache_path` points at a sqlite score cache (raw logits keyed by text+hypothesis+model); a shared path
 makes repeat scoring across runs ~free. `None` uses an in-process cache for the instance's lifetime.
 
+**Native sklearn.** It declares string-input estimator tags (like `TfidfVectorizer`), supports
+`set_output(transform="pandas")` (columns are the hypotheses), pickles, clones, and is
+`GridSearchCV`-ready; `sklearn.utils.estimator_checks.check_estimator` passes its applicable checks.
+
 ## Training: producing a pool
 
 Needs the `train` extras. Either drive it from a YAML config with the CLI, or let the vectorizer's

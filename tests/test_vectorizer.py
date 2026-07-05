@@ -80,6 +80,31 @@ def test_sklearn_clone_preserves_params():
     assert w.get_params() == v.get_params()
 
 
+def test_sklearn_tags_declare_string_input():
+    tags = HypothesisVectorizer(HYPS).__sklearn_tags__()
+    assert tags.input_tags.string and tags.input_tags.one_d_array
+    assert not tags.input_tags.two_d_array  # not a numeric-array transformer
+    assert not tags.target_tags.required  # no y needed to transform
+
+
+def test_set_output_pandas():
+    pd = pytest.importorskip("pandas")
+    v = HypothesisVectorizer(HYPS).fit().set_output(transform="pandas")
+    df = v.transform(["hello", "world there"])
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == list(v.get_feature_names_out())
+
+
+def test_sklearn_check_estimator():
+    # sklearn skips its array-based checks for string-input transformers (as for TfidfVectorizer);
+    # the checks it does run (cloneability, param invariance, ...) must pass — none may fail.
+    from sklearn.utils.estimator_checks import check_estimator
+
+    results = check_estimator(HypothesisVectorizer(HYPS), on_fail=None)
+    failed = [(r["check_name"], str(r["exception"])[:200]) for r in results if r["status"] == "failed"]
+    assert not failed, failed
+
+
 def test_pipeline_and_column_transformer_compose():
     y = [0, 1, 0, 1]
     texts = ["short", "a much longer piece of text here", "tiny", "medium length text"]
