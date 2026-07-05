@@ -101,25 +101,32 @@ HypothesisVectorizer(
 
 ### Use cases
 
-**Text column + tabular features.** Compose with `ColumnTransformer`; during training, pass the
-tabular block as the evolution baseline so hypotheses that just re-encode it are pruned:
+**Text column + tabular features.** Generate the pool once with the tabular block as
+`baseline_features` (so hypotheses that just re-encode it are pruned), then *serve the fixed pool* in
+a `ColumnTransformer` — a `ColumnTransformer`/`FeatureUnion` clones its steps on `fit`, so pass the
+generated hypotheses to a fresh instance rather than the fitted generator (which would re-generate):
 
 ```python
 Z = df[["price", "age"]].to_numpy()                       # features the head will also see
-vec = HypothesisVectorizer(task=..., class_definitions=..., evolve=True)
-vec.fit(df["text"], y, baseline_features=Z)               # prune by MARGINAL value over Z
-ct = ColumnTransformer([("hyp", vec, "text"), ("num", StandardScaler(), ["price", "age"])])
+gen = HypothesisVectorizer(task=..., class_definitions=..., evolve=True)
+gen.fit(df["text"], y, baseline_features=Z)               # prune by MARGINAL value over Z
+served = HypothesisVectorizer(hypotheses=gen.hypotheses_)  # fixed pool, pure transformer
+ct = ColumnTransformer([("hyp", served, "text"), ("num", StandardScaler(), ["price", "age"])])
 ```
 
-**TF-IDF channel.** Same mechanism — fit your TF-IDF pipeline, pass its output as
-`baseline_features`, then serve both via `FeatureUnion` (this is how the 0.964 TREC recipe works):
+**TF-IDF channel.** Same pattern — the tabular block is TF-IDF (this is how the 0.964 TREC recipe
+works; `configs/trec_best_l_max.yaml` does it via the CLI):
 
 ```python
 tfidf = make_pipeline(TfidfVectorizer(), TruncatedSVD(128)).fit(texts)
-vec = HypothesisVectorizer(task=..., class_definitions=..., evolve=True)
-vec.fit(texts, y, baseline_features=tfidf.transform(texts))
-features = FeatureUnion([("nli", vec), ("tfidf", tfidf)])
+gen = HypothesisVectorizer(task=..., class_definitions=..., evolve=True).fit(
+    texts, y, baseline_features=tfidf.transform(texts))
+served = HypothesisVectorizer(hypotheses=gen.hypotheses_)
+features = FeatureUnion([("nli", served), ("tfidf", tfidf)])
 ```
+
+A worked end-to-end tabular+text benchmark (CFPB monetary-relief prediction) is in
+[`examples/cfpb.py`](examples/cfpb.py); see [docs/cfpb-benchmark.md](docs/cfpb-benchmark.md).
 
 **Low data (~3–5 examples/class).** Covariance dedup and CV evolution both need data they don't
 have; use text-space dedup and skip evolution — the pool is then a pure LM prior:

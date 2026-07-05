@@ -3,7 +3,10 @@ run_name: ag_news
 seed: 7
 data:
   name: ag_news
+encoder:
+  model: dleemiller/finecat-nli-m # NLI cross-encoder (HuggingFace)
 lm:
+  model: openrouter/deepseek/deepseek-v4-flash # hypothesis proposer (litellm / OpenRouter id)
   extra_body: # pin the OpenRouter provider for reproducible LM caching
     provider:
       order: [deepseek]

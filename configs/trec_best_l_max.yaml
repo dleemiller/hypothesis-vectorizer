@@ -5,7 +5,9 @@ seed: 7
 data:
   name: trec
 encoder:
-  model: dleemiller/finecat-nli-l
+  model: dleemiller/finecat-nli-l # NLI cross-encoder (HuggingFace)
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash # hypothesis proposer (litellm / OpenRouter id)
 pool:
   size: 64
   rounds: 10

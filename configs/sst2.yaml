@@ -3,7 +3,10 @@ run_name: sst2
 seed: 7
 data:
   name: sst2
+encoder:
+  model: dleemiller/finecat-nli-m # NLI cross-encoder (HuggingFace)
 lm:
+  model: openrouter/deepseek/deepseek-v4-flash # hypothesis proposer (litellm / OpenRouter id)
   extra_body: # pin the OpenRouter provider for reproducible LM caching
     provider:
       order: [deepseek]

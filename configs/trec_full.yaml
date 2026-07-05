@@ -1,0 +1,19 @@
+# Headline run: the best recipe (-l encoder + TF-IDF channel + evolution) trained from scratch
+# on the FULL TREC-6 training set (all 5452 examples, vs the 2000 used in development), same 500
+# test set. val unused by the pool pipeline, so val_size=0.
+run_name: trec_full
+seed: 7
+data:
+  name: trec
+  train_size: 5452 # all of TREC-6 train
+  val_size: 0
+  test_size: 2000 # capped to the 500 real test examples
+encoder:
+  model: dleemiller/finecat-nli-l
+pool:
+  size: 64
+  rounds: 10
+  patience: 4
+lexical:
+  kind: tfidf_svd
+  dims: 128
