@@ -1711,3 +1711,21 @@ tuned instruction ties hand-written, p≈1.0 — no measured benefit). (3) DELET
 `diagnose` (superseded by `compare`). Also dropped dead wordllama earlier. No dangling refs; 23 tests
 pass; ruff clean. Inference is now the sklearn HypothesisVectorizer (dspy-free); training deps in the
 `train` group. Net: smaller, one featurization path, no proven-neutral/negative machinery.
+
+## 2026-07-05 (hourly) — PRE-REGISTER: HypothesisVectorizer correctness parity on real data
+
+Verify the shipped inference interface reproduces the method end-to-end (tests so far use fakes only).
+from_run("runs/trec_best_l") on real cached -l features: (a) vec.transform(train) must EQUAL
+scorer.features(train, pool) exactly (DRY — both wrap the same encoder); (b) Pipeline(vec, HGB) test
+accuracy must reproduce the run's ~0.954 ballpark. EXPECTATION: exact feature parity; test acc within
+noise of 0.954 (HGB vs the run's cv_selected_head differ slightly). Confirms from_run/transform are
+correct, not just the fake-scorer unit tests. Cached (-l pool scored during the run), no GPU.
+
+## 2026-07-05 (hourly) — RESULT: HypothesisVectorizer parity CONFIRMED on real data
+
+from_run("runs/trec_best_l"): loaded encoder finecat-nli-l, 64 hyps, entail_contradict. (a) FEATURE
+PARITY EXACT — vec.transform(train) allclose scorer.features(train, pool) (both wrap the same encoder);
+shape (2000,128)=(n,2m). (b) END-TO-END — Pipeline(vec, HGB) test acc 0.9520 vs run pool_cv 0.954,
+within noise (HGB vs cv_selected_head). The shipped inference interface reproduces the method correctly
+on real cached data, not just the fake-scorer unit tests. All cache hits, no GPU. Verdict: interface
+correct; no action needed.
