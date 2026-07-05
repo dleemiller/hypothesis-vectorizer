@@ -1357,3 +1357,15 @@ Pre-reg: trec_newinstr (new instruction + covariance dedup + -m) vs committed tr
 instruction + STS). -m chosen because -l washed all configs to ~0.95 noise; -m is where instruction
 quality can show, and TREC is a QA task the answer-oriented style fits. Expect: >0.920 if the answer-
 oriented hyps add distinct signal; ~0.920 if redundant. McNemar to judge. Dedup change is ~neutral (p=0.27).
+
+### 2026-07-04 — answer-oriented instruction: +0.014 at -m (promising); tree-structured output added
+
+trec_newinstr (updated instruction + covariance dedup, -m) = 0.934 vs committed trec (0.920):
+McNemar +0.014, discordant 31 (12 old-only / 19 new-only), p=0.28. Directionally positive, largest
+instruction delta seen, at -m where instruction quality shows (-l washed to noise). Not significant
+on one seed -> promising, needs more seeds/datasets to confirm. (dedup change ~neutral, p=0.27.)
+
+Then implemented Lee's decision-tree methodology IN THE DATA STRUCTURE (commit 0248fb5): GeneratePool
+returns `tree` (list[SplitNode]: depth/separates/hypotheses, root=grouping -> leaves=boundary) + a
+separate flat `hypotheses` list (current approach); _flatten merges both. Not yet generation-tested.
+Next: generate with tree structure, check it yields real grouping/boundary hyps + whether it helps at -m.
