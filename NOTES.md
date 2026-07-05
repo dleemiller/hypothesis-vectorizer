@@ -1351,3 +1351,9 @@ the semantics-only tuned pool back to parity with the hand-written pool. All con
 - Covariance deduper: = STS, dropped the STS dependency.
 - Answer-oriented instruction style: added + tweaked; produces clean distinct hypotheses (vocabulary
   enrichment; untested on a dataset where answer-type ambiguity is the failure mode).
+
+### 2026-07-04 — testing the updated hand-written instruction (answer-oriented) at -m
+Pre-reg: trec_newinstr (new instruction + covariance dedup + -m) vs committed trec (0.920, old
+instruction + STS). -m chosen because -l washed all configs to ~0.95 noise; -m is where instruction
+quality can show, and TREC is a QA task the answer-oriented style fits. Expect: >0.920 if the answer-
+oriented hyps add distinct signal; ~0.920 if redundant. McNemar to judge. Dedup change is ~neutral (p=0.27).
