@@ -23,10 +23,13 @@ _RULES = (
     "topic, intent, or wording), also include ANSWER-oriented hypotheses that reduce the text to "
     'the imperative it is equivalent to (e.g. "The text is equivalent to asking someone to name a '
     'thing." / "...to explain or define something." / "...to locate a place." / "...to give a '
-    'number.") and to the FORM of a valid answer (e.g. "The text can be answered with a short '
-    'name." vs "The text requires a full-sentence explanation."). Answer-oriented hypotheses '
-    "separate classes that share question phrasing but differ in answer type; prefer this abstract "
-    "answer-imperative framing over concrete compositional wording, which the encoder grounds poorly."
+    'number."). These are most useful for separating classes whose QUESTIONS LOOK ALIKE but whose '
+    "ANSWERS differ in form — contrast the answer's shape (e.g. \"The text can be answered with a "
+    'short proper name." vs "The text requires a full-sentence explanation."). Do NOT restate an '
+    'intent hypothesis as an answer form (e.g. "asks for a person" and "answered with a person\'s '
+    'name" are redundant), and avoid vacuous forms true of almost any question (e.g. "a single '
+    'word", "a phrase"). Prefer abstract answer-imperative framing over concrete compositional '
+    "wording, which the encoder grounds poorly."
 )
 
 

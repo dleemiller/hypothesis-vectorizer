@@ -1317,3 +1317,19 @@ Findings:
    (made-of) -> instruction should steer to answer-imperative, not compositional, framing.
 Proposed instruction addition: an angle "what a valid ANSWER looks like — reduce the question to its
 imperative (Name/Explain/Define/Locate/Count X) and to the answer's form (a short name vs a sentence)".
+
+### 2026-07-04 — answer-oriented instruction: generated + evaluated + tweaked
+
+Added an ANSWER-oriented angle to _RULES, then generated 30 TREC hyps and scored at -m.
+- v1: 10/30 answer-oriented but flawed — vacuous forms ("answered with a single word" AUC 0.591,
+  "a phrase" 0.768) and answer-FORM restatements redundant with intent ("answered with a person's
+  name" 0.915 ~ "asks for a person's name" 0.941 -> covariance dedup would drop them).
+- Tweaked _RULES: ban vacuous forms, forbid restating intent as answer-form, emphasize answer-
+  imperative + the disambiguating short-name-vs-full-sentence contrast.
+- v2: 6/30, ALL clean answer-imperatives, strong + distinct: locate-a-place 0.966 (LOC), name-a-
+  person 0.961 (HUM), give-a-number 0.908 (NUM), expand-an-acronym 0.907 (ABBR), explain-in-full-
+  sentences 0.750 (DESC). Zero vacuous, zero redundant.
+Verdict: instruction now produces clean distinct answer-oriented hyps (genuine vocabulary
+enrichment). Answer-LENGTH axis (ENTY/DESC discriminator) still light — but that's the intrinsic
+ceiling, not worth pushing. Whether it lifts final accuracy needs a full run on a dataset where
+answer-type ambiguity is the failure mode (TREC ceiling already hit).
