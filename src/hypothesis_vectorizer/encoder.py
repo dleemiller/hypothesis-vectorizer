@@ -83,6 +83,11 @@ class EntailmentScorer:
                 else:
                     pending.append((i, j))
 
+        # batch similar lengths together: predict() pads every batch to its longest member, so
+        # random order wastes compute on mixed-length corpora (long CFPB narratives + short ones).
+        # Order is semantically inert — every pair's result is keyed individually.
+        # TODO: measure the speedup at the next GPU window (expect ~1.3-2x on long-text corpora).
+        pending.sort(key=lambda ij: len(norm_t[ij[0]]), reverse=True)
         for start in range(0, len(pending), _GPU_CHUNK):
             batch = pending[start : start + _GPU_CHUNK]
             pairs = [(norm_t[i], norm_h[j]) for i, j in batch]

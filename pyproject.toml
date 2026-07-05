@@ -1,9 +1,22 @@
 [project]
 name = "hypothesis-vectorizer"
-version = "0.3.0"
+version = "0.4.0"
 description = "Interpretable text classification from LLM-written NLI hypotheses scored by a frozen cross-encoder, as scikit-learn features"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Lee Miller" }]
 requires-python = ">=3.11"
+keywords = ["nli", "text-classification", "interpretability", "scikit-learn", "feature-extraction"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 # Inference core: HypothesisVectorizer needs only the encoder + sklearn. No LM/dspy.
 dependencies = [
     "numpy>=2.4.6",
@@ -24,6 +37,10 @@ train = [
     "rich>=15.0.0",
     "typer>=0.26.8",
 ]
+
+[project.urls]
+Repository = "https://github.com/dleemiller/hypothesis-vectorizer"
+Issues = "https://github.com/dleemiller/hypothesis-vectorizer/issues"
 
 [project.scripts]
 hypothesis-vectorizer = "hypothesis_vectorizer.train.cli:app"

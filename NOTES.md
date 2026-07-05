@@ -1896,3 +1896,26 @@ No code changed / committed this cycle (validation gate requires a run; GPU rese
    the cost, not the cache.
 4. Removed stray empty CLAUDE.md.
 All 40 tests pass, ruff clean. No GPU touched (index build/vacuum were disk-only).
+
+## 2026-07-05 — maintenance: metadata/0.4.0, py3.13, profiling verdict (no Cython), length-sort batching
+1. pyproject: license=Apache-2.0, authors, keywords, classifiers, project.urls -> renamed repo;
+   version 0.3.0 -> 0.4.0 (the train/ reorg changed internal import paths). Wheel builds clean.
+2. Cleanup: 13 root runs_*.log launcher logs -> runs/_launcher_logs/; deleted models/ (dead GEPA-era
+   artifacts — gepa_tune code was removed in the sklearn rewrite).
+3. Coverage (pytest --cov): 79% total. Algorithmic core 88-100% (evolve 98, vectorizer 96, runner 93,
+   dedup 91). Thin: cli 0%, compare 0% (typer/CLI glue), proposer 47% (live-LM paths), encoder 73%
+   (GPU paths). No alarming gap; CLI/compare tests would be low-value glue tests.
+4. PROFILING (cache-hit scoring, real 2.5GB cache, TREC 2000x62=124k pairs, zero GPU): warm 0.48s
+   (get_logits row loop 0.37s), cold 4.6s (sqlite page reads). Evolution does tens of such passes ->
+   ~10-30s CPU per run vs hours of GPU. VERDICT: nothing in this codebase is worth Cython — hot paths
+   are already C (GPU inference, sqlite, sklearn CV); a numpy rewrite of get_logits would save
+   fractions of a second per run. Memory is a non-issue CPU-side (feature matrices are MBs); the
+   10.6GB GPU footprint is model+activations, already halved by max_text_chars 512.
+5. REAL perf lever implemented: encoder._logits now sorts pending pairs by text length before
+   batching — CrossEncoder.predict pads each batch to its longest member, so random order wastes
+   compute on mixed-length corpora. Semantically inert (results keyed per pair). EXPECT ~1.3-2x on
+   long-text corpora (CFPB), ~none on TREC. VALIDATE at next GPU window before claiming the number.
+6. Python: deps resolve AND all 40 tests pass on 3.13 and 3.14 (side venvs). Adopted 3.13 as the dev
+   pin (.python-version, now tracked); floor stays >=3.11; classifiers list 3.11-3.14. 3.14 CUDA
+   path untested — staying one step back. NOTE (resource-change flag): future GPU runs now execute on
+   py3.13 + same torch — flagging per protocol; revert = echo 3.11 > .python-version && uv sync.
