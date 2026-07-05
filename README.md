@@ -39,7 +39,9 @@ human-readable list of ~64 English sentences.
 hypothesis is a cross-encoder forward pass. So the lexical block joins evolution as a **fixed
 baseline** and NLI hypotheses are pruned by their **marginal value over TF-IDF** — a hypothesis
 whose signal TF-IDF already carries dies. The NLI pool (and thus per-prediction cost) shrinks to
-only the hypotheses carrying semantics lexical can't reach, in the same accuracy band.
+only the hypotheses carrying semantics lexical can't reach, in the same accuracy band. Best point
+estimate to date: **0.964** at `-l` (seed 7), though not yet significantly above the plain-TF-IDF
+run (0.956, McNemar p=0.42) — treat as promising, not established.
 
 > This recipe targets the **data-rich** regime. The method's expected edge is at **low-N**
 > (2–5 examples/class), where a different pipeline applies (evolution off, prior-selected

@@ -24,28 +24,27 @@ def test_hotspots_group_mutually_confused_classes():
     assert groups == [[0, 1]]
 
 
-def test_evolve_prunes_constant_feature_with_reason_and_stops_on_plateau():
+def test_evolve_grow_select_flags_dead_feature_and_ships_checkpoint():
     bundle = make_bundle()
-    pool = [f"f{i}" for i in range(8)]  # f7 is constant -> confident dead
+    pool = [f"f{i}" for i in range(8)]  # f7 is a constant -> dead weight
     proposer = FakeProposer(refill_batches=[[f"f{2 + i} variant {i}" for i in range(4)]] * 6)
     cfg = PoolConfig(size=8, rounds=6, patience=2, rank_sample=0)
 
     final, history, checkpoints = evolve(bundle, pool, FakeScorer(), proposer, TextOnlyDeduper(), cfg, seed=0)
 
-    # the constant feature was pruned with the undetectable reason
+    # grow-then-select schema: every round records the merge decision
+    keys = {"heldout_acc", "merged_acc", "accepted", "survivors", "failed", "refills"}
+    assert all(keys <= h.keys() for h in history)
+    # the constant feature is flagged weak with the undetectable reason
     all_failed = [f for h in history for f in h["failed"]]
     assert any(f.startswith("f7") and "undetectable" in f for f in all_failed)
-    # informative features always survive
+    # informative features are present in the shipped pool
     assert any(h.startswith("f0") for h in final) and any(h.startswith("f1") for h in final)
-    # patience stopped it before the cap (synthetic data saturates immediately)
-    assert len(history) < 6
-    # every round logs the held-out accuracy
-    assert all("heldout_acc" in h for h in history)
-    # a checkpoint per round, and the shipped pool is one of them (best held-out, not the last)
+    # a checkpoint per round; shipped pool is the best-held-out checkpoint, sized to the target
     assert len(checkpoints) == len(history)
-    assert final in [c.pool for c in checkpoints]
     assert final == select_checkpoint(checkpoints).pool
-    # the refill LM saw failure reasons and confusion evidence
+    assert all(c.n_hyps == cfg.size for c in checkpoints)
+    # the refill LM saw the current pool and failure reasons
     assert proposer.refill_calls and proposer.refill_calls[0]["failed"]
 
 
@@ -75,14 +74,15 @@ def test_evolve_ships_peak_not_last_round():
     assert final == best.pool
 
 
-def test_evolve_records_refill_target_aucs():
+def test_evolve_accept_gate_ships_best_checkpoint():
     bundle = make_bundle()
     pool = [f"f{i}" for i in range(8)]
-    # refills map to informative-ish columns so instrumentation has something to measure
     proposer = FakeProposer(refill_batches=[["f2 fresh"], ["f3 fresh"], ["f4 fresh"]])
     cfg = PoolConfig(size=8, rounds=3, patience=3, rank_sample=0)
-    _, history, _ = evolve(bundle, pool, FakeScorer(), proposer, TextOnlyDeduper(), cfg, seed=0)
-    instrumented = [h for h in history if "refill_target_aucs" in h]
-    if instrumented:  # requires >=2 rounds and a hotspot; structure check
-        assert isinstance(instrumented[0]["refill_target_aucs"], list)
-        assert "refill_hit_rate" in instrumented[0]
+    final, history, checkpoints = evolve(bundle, pool, FakeScorer(), proposer, TextOnlyDeduper(), cfg, seed=0)
+    # shipped pool is the best checkpoint (never a post-peak dip)
+    best = select_checkpoint(checkpoints)
+    assert final == best.pool
+    assert best.heldout_acc == max(c.heldout_acc for c in checkpoints)
+    # every round records an accept/revert decision and a merged-pool score
+    assert all("accepted" in h and "merged_acc" in h for h in history)

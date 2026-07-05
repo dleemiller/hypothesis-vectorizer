@@ -1,15 +1,18 @@
-"""STAGE 2 — evolve the pool. The measured design (METHOD.md):
+"""STAGE 2 — evolve the pool by GROW-THEN-SELECT (monotonic).
 
-- rank hypotheses by CV-fold permutation importance + cross-fold sign STABILITY
-  (single-split ranking churned 50% across seeds: half the kills were coin flips);
-- prune only CONFIDENT deaths (helped in zero folds); ambiguous ones get another round;
-- feed the LM the REASON each pruned hypothesis failed, plus confusion HOT SPOTS
-  (grouped errors; batches force pattern-level proposals, single examples invite overfit);
-- stop on held-out plateau (generation saturates ~round 2: refill hit-rate decays
-  100% -> 20% -> 0%);
-- instrument every round: held-out accuracy, and each refill's standalone AUC on the
-  hot spot it targeted (once the head interpolates train, marginal importance cannot
-  see a good new feature; standalone alignment can).
+Each round MERGES the current pool with fresh LM refills into a superset (~2x size), then PRUNES
+back to the target size by marginal-over-lexical permutation importance with covariance dedup. A
+refill enters only if it OUT-RANKS an incumbent — so, unlike a blind prune-then-replace, a
+good-but-unlucky feature is never swapped out for an untested worse one. An ACCEPT GATE then keeps
+the merged pool only if it does not regress beyond round noise (else it reverts and next round tries
+different refills), and the shipped pool is the best-held-out CHECKPOINT, not the last. Net:
+evolution moves forward or holds, never blindly backward, while still exploring every round.
+
+- rank by CV-fold permutation importance + cross-fold sign STABILITY (single-split ranking churned
+  50% across seeds); errors drive confusion HOT SPOTS fed to the refill proposer;
+- grow: propose refills targeting hot spots (batches force pattern-level proposals);
+- select: keep the top `size` of (pool ∪ refills) by importance, skipping covariance-redundant ones;
+- accept gate + best-checkpoint => forward-only; stop on plateau or when refills run dry.
 """
 
 from collections import Counter
@@ -18,14 +21,15 @@ from dataclasses import dataclass
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.inspection import permutation_importance
-from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 
 from .config import PoolConfig
 from .data import Bundle, labeled_examples, stratified_indices
-from .dedup import Deduper
+from .dedup import Deduper, _zscore
 from .encoder import EntailmentScorer
 from .proposer import Proposer
+
+_ROUND_NOISE = 0.003  # held-out jitter from HGB thread nondeterminism; accept/tie thresholds use it
 
 
 @dataclass
@@ -205,26 +209,46 @@ def _confusion_evidence(
     return evidence
 
 
-def _target_aucs(
-    x: np.ndarray, pool: list[str], refills: list[str], m: int, target: tuple[int, int], y: np.ndarray
-) -> list[float]:
-    """Standalone AUC of each surviving refill on the class pair it targeted,
-    taking the better of its two feature columns."""
-    a, b = target
-    mask = (y == a) | (y == b)
-    yy = (y[mask] == a).astype(int)
-    aucs = []
-    for s in refills:
-        if s not in pool:
+def _heldout_accuracy(
+    x: np.ndarray, y: np.ndarray, seed: int, lex: np.ndarray | None = None, folds: int = 4
+) -> float:
+    """Cheap CV held-out accuracy (no permutation importance) — for the accept gate. Uses the same
+    fold seed and HGB seed as rank_hypotheses, so it matches that round's reported held-out."""
+    xx = x if lex is None else np.concatenate([x, lex], axis=1)
+    skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
+    errors = 0
+    for itr, ihe in skf.split(xx, y):
+        clf = HistGradientBoostingClassifier(max_iter=100, random_state=seed)
+        clf.fit(xx[itr], y[itr])
+        errors += int((clf.predict(xx[ihe]) != y[ihe]).sum())
+    return 1.0 - errors / len(y)
+
+
+def _select_topk(order: np.ndarray, x: np.ndarray, m: int, k: int, cov_threshold: float) -> list[int]:
+    """From `order` (candidate indices, most important first), keep up to k, skipping any whose
+    entail-score vector correlates > cov_threshold with an already-kept, higher-ranked one — so we
+    don't fill slots with covariance-redundant features. Backfill (ignoring covariance) if dedup
+    leaves us short of k. `x` is the (n, 2m) candidate feature matrix; entail cols are x[:, :m]."""
+    ent = x[:, :m]
+    n = x.shape[0]
+    kept: list[int] = []
+    kept_z: list[np.ndarray] = []
+    for idx in order:
+        i = int(idx)
+        zv = _zscore(ent[:, i])
+        if any(abs(float(zv @ zk)) / n > cov_threshold for zk in kept_z):
             continue
-        j = pool.index(s)
-        best = 0.5
-        for col in (x[mask, j], x[mask, m + j]):
-            if np.std(col) > 1e-9:
-                auc = roc_auc_score(yy, col)
-                best = max(best, auc, 1 - auc)
-        aucs.append(round(float(best), 3))
-    return aucs
+        kept.append(i)
+        kept_z.append(zv)
+        if len(kept) >= k:
+            return kept
+    for idx in order:  # backfill ignoring covariance if dedup left us short
+        i = int(idx)
+        if i not in kept:
+            kept.append(i)
+            if len(kept) >= k:
+                break
+    return kept
 
 
 def evolve(
@@ -236,16 +260,18 @@ def evolve(
     cfg: PoolConfig,
     seed: int,
     lex_train: np.ndarray | None = None,
-) -> tuple[list[str], list[dict]]:
-    """Returns (best-held-out pool, per-round history). We return the pool with the highest
-    held-out accuracy seen across rounds — NOT the last one: evolution can dip after its peak,
-    and the final round's survivors+refills are never even scored. History is the audit trail:
-    every prune with its reason, every refill with its later target-AUC.
+) -> tuple[list[str], list[dict], list[Checkpoint]]:
+    """GROW-THEN-SELECT evolution. Returns (shipped pool, per-round history, checkpoints).
 
-    `lex_train` (n_train, d), if given, is the lexical channel over ALL train texts; the
-    ranking sees it as a fixed baseline so NLI hypotheses are pruned by MARGINAL value over
-    lexical (redundant-with-TF-IDF hypotheses die), and refill targets the confusions lexical
-    leaves behind."""
+    Each round: (1) score+rank the current pool (marginal over `lex_train`) and CHECKPOINT it;
+    (2) propose refills targeting confusion hot spots and MERGE them into a superset (~2x size);
+    (3) SELECT the top `size` of the superset by importance + covariance dedup; (4) an ACCEPT GATE
+    keeps the merged pool only if its held-out doesn't regress beyond round noise, else it reverts.
+    The shipped pool is the best-held-out checkpoint. A refill thus enters only by OUT-RANKING an
+    incumbent, and the pool never blindly regresses — while every round still explores.
+
+    `lex_train` (n_train, d), if given, is the lexical channel over ALL train texts; the ranking
+    sees it as a fixed baseline so hypotheses are ranked by MARGINAL value over lexical."""
     rng = np.random.default_rng(seed)
     if cfg.rank_sample and cfg.rank_sample < len(bundle.train_texts):
         sub = stratified_indices(bundle.y_train, cfg.rank_sample, rng)
@@ -260,74 +286,75 @@ def evolve(
     history: list[dict] = []
     checkpoints: list[Checkpoint] = []
     best_acc, since_best = -1.0, 0
-    prev_refills: list[str] = []
-    prev_target: tuple[int, int] | None = None
+    grow_to = 2 * cfg.size  # merge pool + refills up to ~2x, then select back to `size`
 
+    round_i = 0
     for round_i in range(cfg.rounds):
         m = len(pool)
         x = scorer.features(sub_texts, pool)
-        # fixed fold seed across rounds: the plateau check compares round-over-round
-        # held-out accuracy, which is only meaningful on the SAME fold splits
         ranking = rank_hypotheses(x, sub_y, m, seed, lex=lex_sub)
-
-        # instrumentation: did last round's refills hit their assigned hot spot?
-        refill_aucs: list[float] = []
-        if prev_refills and prev_target is not None:
-            refill_aucs = _target_aucs(x, pool, prev_refills, m, prev_target, sub_y)
-            if history:
-                history[-1]["refill_target_aucs"] = refill_aucs
-                history[-1]["refill_hit_rate"] = round(
-                    float(np.mean([a >= 0.75 for a in refill_aucs])) if refill_aucs else 0.0, 3
-                )
-
-        # prune confident deaths only, capped so one round never guts the pool
-        max_prune = m - max(4, int(m * cfg.min_keep_frac))
-        dead = [int(i) for i in ranking.order[::-1] if ranking.stability[i] == 0.0][:max_prune]
-        dead_set = set(dead)
-        keep = [int(i) for i in ranking.order if i not in dead_set]
-        survivors = [pool[i] for i in keep]
-        survivor_cols = x[:, keep]
-
-        failed = [f"{pool[i]} ({_failure_reason(x[:, i], x[:, m + i], survivor_cols)})" for i in dead]
-
-        groups = hotspots(ranking.errors, sub_y, bundle.n_classes)
-        evidence = _confusion_evidence(bundle, sub, ranking.errors, groups, rng)
-
-        refills: list[str] = []
-        if dead:
-            proposed = proposer.refill(
-                bundle.task, bundle.class_descriptions, examples, survivors, failed, evidence, n=len(dead)
-            )
-            refills, _ = deduper.filter(proposed, against=survivors, seen=seen)
-
         acc = ranking.heldout_accuracy
         checkpoints.append(Checkpoint(round=round_i, heldout_acc=acc, pool=list(pool)))
-        history.append(
-            {
-                "round": round_i,
-                "heldout_acc": round(acc, 4),
-                "survivors": survivors,
-                "failed": failed,
-                "refills": refills,
-            }
-        )
-        print(
-            f"--- evolve round {round_i}: heldout {acc:.4f}, kept {len(survivors)}, "
-            f"pruned {len(failed)}, refilled {len(refills)}",
-            flush=True,
-        )
-
         if acc > best_acc + 1e-4:
             best_acc, since_best = acc, 0
         else:
             since_best += 1
 
-        pool = survivors + refills
-        prev_refills = refills
-        prev_target = tuple(groups[0][:2]) if groups else None
+        # confusion targeting + weak-feature feedback (lowest marginal importance first)
+        groups = hotspots(ranking.errors, sub_y, bundle.n_classes)
+        evidence = _confusion_evidence(bundle, sub, ranking.errors, groups, rng)
+        ranked_pool = [pool[int(i)] for i in ranking.order]
+        survivor_cols = x[:, [int(i) for i in ranking.order]]
+        weakest = [int(i) for i in ranking.order[::-1][: max(1, m // 3)]]
+        failed = [f"{pool[i]} ({_failure_reason(x[:, i], x[:, m + i], survivor_cols)})" for i in weakest]
+
+        # GROW: propose refills to reach the ~2x superset
+        n_refill = max(0, grow_to - m)
+        refills: list[str] = []
+        if n_refill:
+            proposed = proposer.refill(
+                bundle.task, bundle.class_descriptions, examples, ranked_pool, failed, evidence, n=n_refill
+            )
+            refills, _ = deduper.filter(proposed, against=pool, seen=seen)
+
+        # MERGE + SELECT: keep the best `size` of (pool ∪ refills) by importance + covariance dedup;
+        # ACCEPT GATE commits the merge only if it does not regress beyond round noise
+        accepted, merged_acc = True, acc
+        if refills:
+            candidates = list(pool) + refills
+            xc = scorer.features(sub_texts, candidates)
+            rank_c = rank_hypotheses(xc, sub_y, len(candidates), seed, lex=lex_sub)
+            keep_idx = _select_topk(rank_c.order, xc, len(candidates), cfg.size, deduper.thr)
+            new_pool = [candidates[i] for i in keep_idx]
+            xn = scorer.features(sub_texts, new_pool)  # cached: all scored just above
+            merged_acc = _heldout_accuracy(xn, sub_y, seed, lex=lex_sub)
+            if merged_acc >= best_acc - _ROUND_NOISE:
+                pool = new_pool
+            else:
+                accepted = False
+
+        history.append(
+            {
+                "round": round_i,
+                "heldout_acc": round(acc, 4),
+                "merged_acc": round(merged_acc, 4),
+                "accepted": accepted,
+                "survivors": list(pool),
+                "failed": failed,
+                "refills": refills,
+            }
+        )
+        print(
+            f"--- evolve round {round_i}: heldout {acc:.4f}, pool {m}, +{len(refills)} refills "
+            f"-> merged {merged_acc:.4f} ({'accepted' if accepted else 'REVERTED'})",
+            flush=True,
+        )
 
         if since_best >= cfg.patience:
             print(f"--- evolve stop: no held-out improvement for {cfg.patience} rounds", flush=True)
+            break
+        if not refills:
+            print("--- evolve stop: exploration exhausted (no new refills)", flush=True)
             break
 
     if not checkpoints:  # cfg.rounds == 0
@@ -335,7 +362,7 @@ def evolve(
     chosen = select_checkpoint(checkpoints)
     if chosen.round != round_i:
         print(
-            f"--- evolve: shipping checkpoint from round {chosen.round} "
+            f"--- evolve: shipping best checkpoint from round {chosen.round} "
             f"(heldout {chosen.heldout_acc:.4f}, {chosen.n_hyps} hyps), not the last round",
             flush=True,
         )

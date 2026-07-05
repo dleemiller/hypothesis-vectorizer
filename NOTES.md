@@ -1449,3 +1449,23 @@ round 1 pruned 10 vs 12; held-out 0.9114/0.9151 (on NLI+lexical). Verdict deferr
 will judge on (1) final NLI pool size < best_l's 64, (2) test acc within noise of best_l 0.954 /
 tuned_l_lex 0.956, (3) which hypothesis types got dropped (expect wh-word/keyword ones lexical covers).
 No new job launched (one in flight; no CUDA parallelism).
+
+## 2026-07-04 — trec_best_l_max = 0.964 (best TREC -l point estimate) + evolve regression diagnosis
+
+trec_best_l_max (answer-oriented instr + covariance dedup + LEXICAL-AWARE pruning + tfidf_svd 128,
+pool 64, 10 rounds, -l): **acc 0.964, macroF1 0.968**, best TREC -l number to date
+(best_l 0.954, tuned_l_lex 0.956, baseline_l 0.952). BUT McNemar vs tuned_l_lex (both have tfidf, so
+this isolates lexical-aware PRUNING): delta ~+4 net examples, discordant 9/5, **p=0.42 — NOT
+significant**. So 0.964 is the best point estimate, statistically tied with tuned_l_lex; the
+lexical-aware-pruning gain is promising but unproven on one seed. Do not report as an established win.
+
+Evolution regression (Lee flagged): trec_best_l_max PEAKED at round 3 (heldout 0.9201) then dipped
+every round to round 7 (0.9164), patience-4 stop. Old code shipped the round-7 pool (last), NOT the
+round-3 peak — the checkpoint-best fix (commit 3aa0772) now ships the peak.
+
+Root cause of regression: evolve does BLIND SWAPS — prune stability==0 (noisy 4-fold estimate kills
+real features), then add UNTESTED refills; pool_{i+1}=survivors+refills, refills never compared to
+what they replaced. So a good-but-unlucky feature gets swapped for a worse refill => structural
+regression, not bad luck. Fix (Lee's design, next commit): grow-then-select — generate refills, MERGE
+to ~2x (128), then importance+covariance PRUNE back to 64; a refill enters only if it out-ranks an
+incumbent. Plus a strict accept gate (revert if the new pool regresses beyond noise) => monotonic.
