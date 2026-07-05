@@ -1369,3 +1369,18 @@ Then implemented Lee's decision-tree methodology IN THE DATA STRUCTURE (commit 0
 returns `tree` (list[SplitNode]: depth/separates/hypotheses, root=grouping -> leaves=boundary) + a
 separate flat `hypotheses` list (current approach); _flatten merges both. Not yet generation-tested.
 Next: generate with tree structure, check it yields real grouping/boundary hyps + whether it helps at -m.
+
+### 2026-07-04 — tree (grouping) structure: neutral on TREC; head already derives groups
+
+Balanced tree (group-vs-group splits) + flat list vs flat list only:
+- trec_tree_m (tree+list) 0.926 vs trec_newinstr (list only) 0.934: McNemar delta -0.008, p=0.57 —
+  NOT significant (within noise, directionally slightly negative).
+- ~6 group-style hyps DID survive evolution ("named entity such as a person, place, or thing";
+  "a person or a place") — not pruned, just not more useful than one-vs-rest.
+Why no gain: the RF/HGB head already DERIVES group boundaries by combining one-vs-rest features, so
+explicit balanced-group features are largely redundant; a couple go vacuous (fire for 5-6 classes).
+Caveat: TREC is a WEAK test for grouping — 6 flat, cleanly-separable classes, no hierarchy for group
+features to exploit. Grouping would only earn its keep on a dataset with genuine class hierarchy that
+one-vs-rest misses. Tree structure kept (interpretable, neutral); its real test is a hierarchical dataset.
+Session theme reconfirmed: label-side structural cleverness (instruction tuning, grouping) is
+neutral/within-noise; the ENCODER is the lever.
