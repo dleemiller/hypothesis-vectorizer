@@ -1393,3 +1393,48 @@ HGB 0.8760=0.8760, RF 0.8615=0.8615 (identical — trees are scale-invariant), L
 Principle: redundancy belongs in feature SELECTION (drop), not WEIGHTING (trees ignore scale). Already
 handled: covariance dedup (drop |corr|>0.95) + permutation importance (redundant feature -> ~0 marginal
 importance -> pruned). Only matters for an unscaled linear/distance model, which we don't use.
+
+## 2026-07-04 — trec_tree128_m (pool 128, crowding-out hypothesis) + low-N pivot
+
+Q: does pool=128 unlock weak-but-valuable features that pool=64 crowds out? VERDICT: NO.
+trec_tree128_m test acc **0.930** (macro-F1 0.9146) vs trec_tree_m@64 0.926 and trec_newinstr@64
+**0.934** — 0.930 sits inside the @64 spread, within TREC-500 noise (~0.5-1pt). cv_train edged up
+(0.8825 vs 0.87) but test did not -> extra capacity, no generalization gain. Doubling the pool just
+carried more redundancy the CV-selected head ignores; no suppressed valuable features exist.
+Pool sustained a full 128 (refill replenishes each round; NOT collapsing to ~53 like the @64 runs —
+my mid-run "collapsing" read was wrong; the falling counts were post-prune, pre-refill). Evolution:
+heldout 0.848->0.859->0.863->0.864->0.864->0.873 over 6 rounds.
+
+Reward-hacking audit (read pool + pruned lists, rounds 0-5): CLEAN. Survivors dominated by meaningful
+answer-type ("equivalent to asking someone to name a person"), intent ("asks for a reason"), content
+hyps. Surface first-word triggers (Who/Where/When/How-many, "stand for" for ABBR) survived because
+genuinely discriminative for question-type + fully interpretable — feature not bug. Pruning correctly
+removed VACUOUS ("asks for a clarification", "a detailed account", "a specific named entity") and
+REDUNDANT (round 3 "...calculate something" hit the "signal nearly identical to a kept hypothesis"
+annotation). No val-gain collapse, no length/punctuation exploits.
+
+PIVOT (see docs/low-n-plan.md): all data-rich null results (128, tree grouping, GEPA, style, pro
+proposer) are null BECAUSE the head compensates when data is abundant. The method's value is
+transfer-knowledge-for-labels, largest at low-N. Next work is the low-N learning-curve study (evolution
+OFF, prior-aggregation/strong-L2 head, STS dedup, crossover lines STS-vs-cov & tree-vs-flat), NOT the
+old tree/boost configs. Cron step-4 auto-launch (sst2_boost/ag_news_boost/20newsgroups_tree) is
+OBSOLETE — those configs don't exist; that plan is superseded. Did not launch anything.
+
+## 2026-07-04 — best method @ -l (trec_best_l)
+
+Took best -m method (trec_newinstr: new answer-oriented instr + covariance dedup + flat/tree pool 64
++ flash) and ran encoder -l. Result: acc **0.954**, macroF1 0.9591, pool 64 (converged clean — round 4
+pruned 0). Evolution heldout 0.908->0.916 (vs ~0.86 at -m: encoder lever in the internal metric too).
+
+Compare vs trec_baseline_l on common refit basis (compare.py refits both heads via fit_head; note
+this reads baseline_l as 0.958, not its stored 0.952 CV-head number): delta n.s., discordant 16
+(7 vs 9), **McNemar p=0.80**. Accuracy TIED — instruction washes out at -l (confirms prior: -l band
+~0.95 regardless of instruction/proposer).
+
+macroF1 looked like a +0.015-0.02 win but it is ENTIRELY 2 ABBR examples (9-example class): best_l
+9/9 ABBR (F1 1.000) vs baseline 7/9 (F1 0.875); ÷6 classes = the whole macro delta. On larger classes
+baseline is slightly AHEAD (HUM 0.976 vs 0.952, DESC 0.965 vs 0.957), which is why accuracy tips to
+baseline. Mechanistically plausible (best_l pool has ABBR answer-hyps "asks what a set of letters
+stands for") but n=9 on one seed = NOT a result; needs seed-sweep to believe. Verdict: best method at
+-l = tied at ~0.95; refinements only reshuffle which tiny class eats errors. Reinforces low-N thesis
+(docs/low-n-plan.md): encoder-rich regime saturates method refinements.

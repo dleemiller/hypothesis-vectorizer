@@ -9,6 +9,36 @@ classical head. No fine-tuning anywhere — task adaptation lives in the sentenc
 choice. TREC-6 with 2k training examples: 0.916–0.938 test accuracy across seeds, ~7 minutes and
 under $0.01 per fit; 0.946 with the larger encoder.
 
+## Current best recipe
+
+The configuration that wins on TREC today (`configs/trec_best_l.yaml`):
+
+- **Encoder `finecat-nli-l`** — the one lever that reliably moves accuracy (`-m`→`-l` ≈ +5 pts,
+  p=0.024). Everything else below is within noise at `-l`; the encoder is where the accuracy is.
+- **Hand-written answer-oriented instruction** (the code default) — each hypothesis describes both
+  the question and the *answer form* it implies (e.g. *"equivalent to asking someone to name a
+  person"* / *"can be answered with a short proper name"*). GEPA-tuning this instruction is neutral
+  (McNemar p≈1.0), so it stays hand-written.
+- **Covariance dedup** — reject a candidate whose entail-score vector correlates >0.95 with a kept
+  hypothesis (removes *behavioral* duplicates that text-similarity dedup misses).
+- **Pool of 64, evolved** — generate → rank by CV permutation-importance + cross-fold stability →
+  prune confident deaths, refill against confusion hot-spots → repeat to a held-out plateau.
+- **CV-selected classical head** (RF / HistGBM) over the entail+contradict features.
+
+Result: **0.954** test accuracy at `-l` (0.916–0.938 at `-m`), ~7 min and <$0.01 per fit, and the
+model is a human-readable list of ~64 English sentences.
+
+**Add the lexical channel when inference cost matters** (`configs/trec_best_l_max.yaml`:
+`lexical: {kind: tfidf_svd, dims: 128}`). TF-IDF is ~free at prediction time, while every NLI
+hypothesis is a cross-encoder forward pass. So the lexical block joins evolution as a **fixed
+baseline** and NLI hypotheses are pruned by their **marginal value over TF-IDF** — a hypothesis
+whose signal TF-IDF already carries dies. The NLI pool (and thus per-prediction cost) shrinks to
+only the hypotheses carrying semantics lexical can't reach, in the same accuracy band.
+
+> This recipe targets the **data-rich** regime. The method's expected edge is at **low-N**
+> (2–5 examples/class), where a different pipeline applies (evolution off, prior-selected
+> hypotheses, STS dedup, light head) — see [docs/low-n-plan.md](docs/low-n-plan.md).
+
 ## Setup
 
 ```bash
