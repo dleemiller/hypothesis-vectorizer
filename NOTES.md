@@ -1656,3 +1656,33 @@ plateau-epsilon tune (no-op on testable trajectory); cross-dataset judging.
 RECOMMENDATION: pause both crons. No cheap, decision-independent, non-noise work remains. Next real
 progress = Lee picks the evolve fix (then implement + validate on 20ng), or greenlights a headroom-
 dataset run. Idle otherwise.
+
+## 2026-07-05 (hourly) — PRE-REGISTER: multi-pool ensemble on cached -l pools (variance/robustness)
+
+Targets a real measured gap: all conclusions are single-seed, no error bars. Cheap proxy on CACHED
+-l pools: fit each pool's head (pool features + its lexical config) on train, average predicted
+class-probabilities across the independent TREC -l pools, argmax -> ensemble test acc. Question: does
+a COMMITTEE of interpretable NLI-hypothesis pools beat the best single pool / reduce variance?
+EXPECTATION: ensemble beats the MEAN single-pool acc and approaches the best; if it exceeds best_l_max
+0.964, ensembling is a real lever worth a proper same-method 3-seed version. Honest: fixed ensemble of
+ALL pools (no test-selection). Caveat: these pools overlap in hypotheses (not seed-independent), so the
+benefit is a LOWER BOUND on what true seed-diversity would give. Cached features, CPU only, no GPU.
+
+## 2026-07-05 (hourly) — RESULT: multi-pool ensemble reaches top of -l band robustly (0.964)
+
+Cached ensemble of 9 independent TREC -l pools (each head refit with fixed HGB for a consistent
+comparison; absolute nums differ slightly from stored cv_selected_head metrics):
+  individual: 0.946-0.960 | mean single 0.9524 | best single 0.9600 | ENSEMBLE(all 9) 0.9640 |
+  ENSEMBLE(top-5) 0.9640.
+The committee beats the MEAN (+1.2pt) and any SINGLE pool (+0.4pt), landing at the top of the -l band
+(0.964) ROBUSTLY — i.e. averaging independent interpretable pools gets you the best number without
+having to pick the single luckiest pool/evolve-config (all within noise 0.946-0.960). +0.4pt over best
+single = ~2 examples, not significant alone, but the variance-reduction direction is the point.
+Caveat: pools overlap in hypotheses (not seed-independent) -> LOWER BOUND; true seed-diverse pools
+should give more, and give real error bars (the project's current single-seed gap).
+
+IMPLICATION (decision-independent of evolve a/b/c): the robust path to the top of the band is a POOL
+COMMITTEE, not optimizing one pool — which also dodges the grow-select overfit problem (no single
+held-out to overfit; diverse pools average out). Next step (needs runs, Lee's call): a proper
+same-method 3-seed ensemble for genuine variance reduction + error bars. Backlog "multi-pool ensemble"
+-> validated on cached proxy; promote to a real 3-seed run when a direction is chosen. No code change.
