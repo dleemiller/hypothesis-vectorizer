@@ -1504,3 +1504,37 @@ DECISION FOR LEE (not auto-reverting — you designed this): grow-then-select is
 for ranking (nested CV), bigger rank_sample, or lighter selection pressure; (c) keep checkpoint+evolve
 but drop checkpoint-best (ship last, not peak) to reduce overfit. Caveat: single seed; a 2-3 seed
 confirm would harden the conclusion before reverting. No code reverted, no new run launched (cron).
+
+## 2026-07-04 (hourly) — PRE-REGISTER: cheap overfit test via growselect checkpoints (cached, no GPU run)
+
+Decisive test of the grow-then-select overfitting finding on ONE completed run, cached features only:
+evaluate TEST accuracy of each trec_growselect_l CHECKPOINT (rounds 0-9, held-out rose 0.9114->0.9313).
+EXPECTATION: if grow-then-select overfits the held-out proxy, test does NOT track the monotone held-out
+climb — test is flat or declines across rounds even as held-out rises. If instead test rises with
+held-out, the 0.948<0.964 gap was seed noise, not overfitting, and grow-then-select is fine. This
+resolves the a/b/c decision within a single run. Head per checkpoint: fixed HGB on (pool features +
+tfidf), full train, eval on held-out test set (honest, cached).
+
+## 2026-07-04 (hourly) — RESULT: held-out is ANTI-correlated with test (decisive, within-run)
+
+Pre-registered test ran (checkpoint trajectory of trec_growselect_l; needed light GPU to score
+intermediate pools on train+test — corrects the "no GPU" claim above). Per-checkpoint TEST acc vs the
+monotone held-out climb:
+  round: 0     1     2     3     4     5     6     7     8     9
+  hout : .9114 .9164 .9176 .9226 .9226 .9276 .9276 .9313 .9313 .9313   (monotone +0.0199)
+  test : .9540 .9620 .9520 .9560 .9560 .9560 .9560 .9480 .9480 .9480   (net -0.0060)
+**corr(held-out, test) = -0.585 (NEGATIVE).** Best TEST = round 1 (0.962, LOW held-out); shipped pool
+= max held-out (round 7) = WORST test (0.948). EXPECTATION (test doesn't track held-out) CONFIRMED and
+stronger than expected: the rank_sample(800) held-out CV is ANTI-correlated with test once optimized
+hard. grow-then-select + accept gate + checkpoint-best all optimize a MISLEADING target;
+checkpoint-best is actively harmful (ships max-held-out = worst-test pool). Round 0 (initial pool, ZERO
+evolution) already tested 0.954 and round 1 peaked 0.962 — evolution beyond round 1 HURT test here.
+
+Decision (Lee's call): the PROXY is the problem, not the mechanism.
+- (c) drop checkpoint-best won't save it (round 9 last = 0.948).
+- (b) independent held-out for selection/accept (nested CV / held-out split not used for ranking) is
+  the principled fix — give the optimizer an honest signal. RECOMMENDED.
+- (a) revert to blind-swap (its churn regularized -> 0.964) is the safe fallback.
+First confirm on a 2nd seed that grow-select underperforms blind-swap before reverting the committed
+default (785e051): within-run corr is strong (n=1 run), cross-method test gap still one seed. No code
+reverted, no full run launched (cron did the cheap diagnostic only).
