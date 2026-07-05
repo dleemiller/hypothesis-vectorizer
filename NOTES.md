@@ -1846,3 +1846,32 @@ cache.py; drop max_text_chars to ~512 for CFPB. Deferred until GPU frees / Lee's
 CRON NOTE: the 15-min review cron is STALE — references removed configs (sst2_boost, ag_news_boost,
 trec_boost, 20newsgroups_tree) and a removed `audit` subcommand + tree/boost methods. Superseded by
 the sklearn HypothesisVectorizer direction. Recommend deleting it.
+
+## 2026-07-05 — plateau-epsilon analysis on cached logs (CPU-only; GPU untouched, Lee's training running)
+Backlog item "plateau epsilon tune" — did the "test on cached data first" step. No GPU, no runs; read
+heldout_acc round-sequences from all runs/*/log.jsonl (97 round-over-round transitions).
+
+MEASURED round noise (|delta heldout|): median 0.0037, p75 0.0063, p90 0.0124, mean 0.0045, max 0.0237.
+Confirms the ~0.003 estimate. Current plateau check (evolve.py:289) is `acc > best_acc + 1e-4` with
+default patience=2, rounds cap 6.
+
+FINDING 1 (the backlog's premise holds): eps=1e-4 is far below noise. 21% of transitions are POSITIVE
+sub-noise upticks (1e-4 < d <= 0.003) that reset the patience counter -> evolution over-runs. Symptom:
+trec_full (patience 4) and trec_best_l_max (patience 4) oscillated within +/-0.005 and ran to their
+round caps (10/8) for a net +0.004/+0.005 that is within noise.
+
+FINDING 2 (the catch — naive fix is HARMFUL): real gains sometimes arrive as a DELAYED JUMP after
+2 flat rounds. trec_pro_l deltas [+0.0012,+0.0013,+0.0100,+0.0012,-0.0025] — the real +0.010 is at
+round 3. With eps=0.003 AND the DEFAULT patience=2, best_acc+eps is not beaten at rounds 1,2 -> since_best
+hits 2 -> STOP at round 2, MISSING the +0.010. So raising epsilon alone (default patience) causes
+premature stopping and lost gains.
+
+CONCLUSION: it is a JOINT (epsilon, patience) tune, not a solo epsilon bump. eps ~= 0.003 must be paired
+with patience >= 3-4 so the detector is noise-robust yet still waits through a noise-plateau for a
+delayed jump. (patience=4 + eps=0.003 recovers trec_pro_l's round-3 jump.)
+
+DEFERRED (needs GPU, ~7-min validating run; gate not met this cycle):
+- make plateau epsilon configurable in PoolConfig (default keep 1e-4 = no behavior change until opted in);
+- validating run when GPU frees: trec at (eps=0.003, patience=4) vs (eps=1e-4, patience=4), compare
+  rounds-to-stop AND pool_cv. Commit only if pool_cv holds (>= within noise) and rounds-to-stop drops.
+No code changed / committed this cycle (validation gate requires a run; GPU reserved for Lee's training).
