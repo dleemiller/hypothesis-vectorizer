@@ -1771,3 +1771,13 @@ Combed all ~2400 lines. Found & fixed:
 Reviewed-and-fine: runner/compare/head/evolve/proposer/cache/dedup/cli (single-purpose, documented);
 build_matrices and vectorizer both delegating to EntailmentScorer.features is the correct DRY point.
 33 tests pass (incl. new: save-requires-fitted, from_config passthrough), ruff clean.
+
+## 2026-07-05 (hourly) — trec_full RUNNING (headline full-train run)
+
+Lee-requested headline: best recipe (-l + tfidf_svd 128 + evolve, rounds 10) trained FROM SCRATCH on
+the FULL TREC train (5452 examples, vs 2000 in dev), same 500 test. Healthy: evolution done (10
+rounds, rank-subsample held-out peaked ~0.90), now fitting CV head on 5452x62 hyps + test scoring
+(WAL fresh, 229% CPU, ~27min). PRE-REGISTERED expectation: meet-or-beat the 2000-train best_l_max
+0.964 (more train data -> cleaner head + evolution signal; but TREC-500 test noise ~0.5-1pt means
+"meet" is plausible). Verdict on completion: pool_cv acc+macroF1, read shipped hypotheses for
+reward-hacking, McNemar vs best_l_max. No new job launched (headline run in flight).
