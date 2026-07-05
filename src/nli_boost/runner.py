@@ -23,7 +23,7 @@ from .dedup import Deduper
 from .encoder import EntailmentScorer
 from .evolve import evolve
 from .head import cv_selected_head, evaluate
-from .proposer import Proposer
+from .proposer import Proposer, generate_pool
 
 
 def _phase(msg: str) -> None:
@@ -67,7 +67,10 @@ def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -
         history: list[dict] = []
     else:
         _phase(f"generating pool of {cfg.pool.size}")
-        pool = _generate_pool(bundle, proposer, deduper, cfg.pool.size, rng)
+        examples = data.labeled_examples(bundle, per_class=3, rng=rng)
+        pool = generate_pool(
+            proposer, deduper, bundle.task, bundle.class_descriptions, examples, cfg.pool.size
+        )
         # STAGE 2 — evolve. If a lexical channel is configured, fit it on train and pass it as a
         # fixed baseline so NLI hypotheses are pruned by MARGINAL value over the cheap TF-IDF
         # features — redundant-with-lexical hypotheses die, shrinking the per-inference NLI pool.
@@ -120,18 +123,3 @@ def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -
             f.write(json.dumps(e) + "\n")
     (out_dir / "costs.json").write_text(json.dumps(costs.to_dict(), indent=2))
     return results
-
-
-def _generate_pool(bundle, proposer, deduper, size: int, rng) -> list[str]:
-    examples = data.labeled_examples(bundle, per_class=3, rng=rng)
-    pool: list[str] = []
-    seen: set[str] = set()
-    for _ in range(5):  # a few attempts in case the LM under-delivers or dedup trims
-        if len(pool) >= size:
-            break
-        proposed = proposer.generate(
-            bundle.task, bundle.class_descriptions, examples, n=size - len(pool), avoid=pool
-        )
-        kept, _ = deduper.filter(proposed, against=pool, seen=seen)
-        pool += kept
-    return pool[:size]

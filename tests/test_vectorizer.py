@@ -13,6 +13,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
+from conftest import FakeProposer, TextOnlyDeduper
+
 from nli_boost.vectorizer import HypothesisVectorizer
 
 
@@ -123,6 +125,28 @@ def test_from_run(tmp_path):
     v = HypothesisVectorizer.from_run(run)  # config.yaml encoder + model.json pool -> fitted
     assert v.hypotheses_ == HYPS and v.encoder == "enc/x" and v.score_mode == "entail"
     assert v.transform(["a", "bb"]).shape == (2, len(HYPS))
+
+
+def test_fit_generates_when_no_hypotheses(monkeypatch):
+    import nli_boost.dedup as dedup_mod
+    import nli_boost.proposer as prop_mod
+
+    fake = FakeProposer(generate_batches=[["hypothesis A", "hypothesis B", "hypothesis C"]])
+    monkeypatch.setattr(prop_mod, "Proposer", lambda *a, **k: fake)
+    monkeypatch.setattr(dedup_mod, "Deduper", lambda *a, **k: TextOnlyDeduper())
+
+    v = HypothesisVectorizer(task="classify", class_definitions=["A: x", "B: y"], n_hypotheses=3)
+    v.fit(["t one", "t two", "t three", "t four"], [0, 1, 0, 1])  # no hypotheses -> generate
+    assert v.hypotheses_ == ["hypothesis A", "hypothesis B", "hypothesis C"]
+    assert fake.generate_calls  # the LM proposer was actually invoked
+    assert v.transform(["z"]).shape == (1, 2 * 3)
+
+
+def test_fit_generate_requires_data_and_metadata():
+    with pytest.raises(ValueError):
+        HypothesisVectorizer().fit()  # no hypotheses and no (X, y)
+    with pytest.raises(ValueError):
+        HypothesisVectorizer(class_definitions=["A"]).fit(["a"], [0])  # missing task
 
 
 def test_pickle_drops_live_scorer():

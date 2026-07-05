@@ -213,3 +213,17 @@ class Proposer:
             if finish and finish != "stop":
                 self.costs.lm_abnormal_finishes += 1
                 print(f"    lm finish_reason={finish!r} provider={provider or 'unknown'}", flush=True)
+
+
+def generate_pool(proposer, deduper, task, class_definitions, examples, size: int) -> list[str]:
+    """Generate a deduped pool of up to `size` hypotheses: a few generate passes, keeping only
+    novel (deduped) statements. Shared by the training runner and HypothesisVectorizer.fit."""
+    pool: list[str] = []
+    seen: set[str] = set()
+    for _ in range(5):  # a few attempts in case the LM under-delivers or dedup trims
+        if len(pool) >= size:
+            break
+        proposed = proposer.generate(task, class_definitions, examples, n=size - len(pool), avoid=pool)
+        kept, _ = deduper.filter(proposed, against=pool, seen=seen)
+        pool += kept
+    return pool[:size]

@@ -87,6 +87,11 @@ clf.predict(new_texts)
 score_mode="entail_contradict", device="cuda", batch_size=128, max_text_chars=1200, cache_path=None)`.
 Standard sklearn params (introspectable via `get_params`/`set_params`, works with `clone`/`GridSearchCV`).
 
+**Fit** — `fit(X, y)` fixes the hypothesis set. If you passed `hypotheses`, it's used as-is (pure
+transformer, no LM). If not, the pool is **generated from `(X, y)`** via the proposer — this needs the
+`train` extras (dspy) and `task` + `class_definitions` set; it raises a clear error otherwise. So a
+plain `pip install nli-boost` can score with a given/loaded pool but cannot generate one.
+
 **Input / output** — `transform(X)` accepts a 1-D sequence of strings or a single text column (as
 `ColumnTransformer` hands over). Output columns per `score_mode`: `entail_contradict` → `2·len(hypotheses)`
 (`[P(entail) | P(contradict)]`), `entail` → `len(hypotheses)`, `contrast` → `len(hypotheses)`

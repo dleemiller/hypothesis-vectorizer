@@ -56,6 +56,10 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
     cache_path : str | Path | None
         sqlite score cache. A path persists scores across processes; ``None`` uses
         an in-process cache (repeat transforms are free within the instance).
+    task, class_definitions, class_names, n_hypotheses, lm, dedup_corr
+        Generation knobs, used ONLY by ``fit(X, y)`` when ``hypotheses`` is None — the
+        pool is then generated from the data via the LM proposer, which requires the
+        ``train`` extras (dspy). Ignored when ``hypotheses`` is supplied.
 
     Notes
     -----
@@ -74,6 +78,12 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
         batch_size=128,
         max_text_chars=1200,
         cache_path=None,
+        task=None,
+        class_definitions=None,
+        class_names=None,
+        n_hypotheses=64,
+        lm="openrouter/deepseek/deepseek-v4-flash",
+        dedup_corr=0.95,
     ):
         self.hypotheses = hypotheses
         self.encoder = encoder
@@ -82,19 +92,29 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
         self.batch_size = batch_size
         self.max_text_chars = max_text_chars
         self.cache_path = cache_path
+        # generation params (only used by fit when `hypotheses` is None; require the `train` extras)
+        self.task = task
+        self.class_definitions = class_definitions
+        self.class_names = class_names
+        self.n_hypotheses = n_hypotheses
+        self.lm = lm
+        self.dedup_corr = dedup_corr
 
     # -- sklearn API ---------------------------------------------------------
 
     def fit(self, X=None, y=None):
-        """Validate config and fix the hypothesis set. No data is required — the
-        vocabulary is the hypotheses, not learned from X (X/y accepted for Pipeline
-        compatibility)."""
-        if not self.hypotheses:
-            raise ValueError("HypothesisVectorizer requires a non-empty `hypotheses` list.")
+        """Fix the hypothesis set. If `hypotheses` was given it is used as-is (pure transformer,
+        no LM — X/y ignored). If not, the hypotheses are GENERATED from (X, y) via the LM proposer,
+        which requires the `train` extras (dspy); `task` and `class_definitions` must be set."""
         if self.score_mode not in _SCORE_MODES:
             raise ValueError(f"score_mode must be one of {_SCORE_MODES}, got {self.score_mode!r}")
-        self.hypotheses_ = list(self.hypotheses)
-        self._scorer = None  # lazy; built on first transform
+        if self.hypotheses:
+            self.hypotheses_ = list(self.hypotheses)
+            self._scorer = None  # lazy; built on first transform
+        else:
+            self.hypotheses_ = self._generate(X, y)  # builds self._scorer (reused by dedup)
+            if not self.hypotheses_:
+                raise ValueError("hypothesis generation produced an empty pool")
         return self
 
     def transform(self, X):
@@ -153,6 +173,37 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
     def __getstate__(self):
         return {k: v for k, v in self.__dict__.items() if k != "_scorer"}
 
+    # -- generation (training side; needs the `train` extras) ----------------
+
+    def _generate(self, X, y) -> list[str]:
+        if X is None or y is None:
+            raise ValueError(
+                "No `hypotheses` given: call fit(X, y) with texts+labels to generate them "
+                "(needs the `train` extras), or pass hypotheses=... / use from_run()."
+            )
+        if not self.task or not self.class_definitions:
+            raise ValueError("Generating hypotheses requires `task` and `class_definitions`.")
+        try:
+            from .proposer import Proposer, generate_pool  # train extra: pulls dspy
+        except ImportError as e:  # pragma: no cover - depends on install
+            raise ImportError(
+                "Generating hypotheses needs the training dependencies (dspy). Install nli-boost "
+                "with the `train` dependency group."
+            ) from e
+        from .config import LMConfig
+        from .dedup import Deduper
+
+        texts = self._coerce_texts(X)
+        y = np.asarray(y)
+        examples = _labeled_examples(texts, y, self.class_names)
+        rng = np.random.default_rng(0)
+        ref_idx = rng.choice(len(texts), size=min(400, len(texts)), replace=False)
+        deduper = Deduper(self._get_scorer(), [texts[i] for i in ref_idx], self.dedup_corr)
+        proposer = Proposer(LMConfig(model=self.lm), CostTracker())
+        return generate_pool(
+            proposer, deduper, self.task, self.class_definitions, examples, self.n_hypotheses
+        )
+
     # -- persistence & config -----------------------------------------------
 
     def save(self, path: str | Path) -> None:
@@ -206,3 +257,18 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
         cfg["hypotheses"] = model["hypotheses"]
         cfg.setdefault("cache_path", str(run_dir.parent.parent / "cache" / "nli_scores.sqlite"))
         return cls.from_config(cfg)
+
+
+def _labeled_examples(texts, y, class_names, per_class: int = 3) -> list[str]:
+    """A few 'text -> class' lines per class, to ground the proposer's generation prompt."""
+    import numpy as np
+
+    y = np.asarray(y)
+    names = class_names or [f"class {c}" for c in range(int(y.max()) + 1)]
+    rng = np.random.default_rng(0)
+    out: list[str] = []
+    for c in np.unique(y):
+        idx = np.flatnonzero(y == c)
+        for i in rng.choice(idx, size=min(per_class, len(idx)), replace=False):
+            out.append(f"{texts[int(i)]} -> {names[int(c)]}")
+    return out
