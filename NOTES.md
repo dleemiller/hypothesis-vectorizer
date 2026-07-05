@@ -1384,3 +1384,12 @@ features to exploit. Grouping would only earn its keep on a dataset with genuine
 one-vs-rest misses. Tree structure kept (interpretable, neutral); its real test is a hierarchical dataset.
 Session theme reconfirmed: label-side structural cleverness (instruction tuning, grouping) is
 neutral/within-noise; the ENCODER is the lever.
+
+### 2026-07-04 — 1-cov feature weighting: no-op for tree heads (verified)
+
+Q: weight features by 1-cov? Tested on trec cached features (weight = 1 - mean|corr| per feature):
+HGB 0.8760=0.8760, RF 0.8615=0.8615 (identical — trees are scale-invariant), LogReg+scaler
+0.809->0.8095 (scaler erases the weight; LogReg worse anyway). Verdict: no-op for our RF/HGB head.
+Principle: redundancy belongs in feature SELECTION (drop), not WEIGHTING (trees ignore scale). Already
+handled: covariance dedup (drop |corr|>0.95) + permutation importance (redundant feature -> ~0 marginal
+importance -> pruned). Only matters for an unscaled linear/distance model, which we don't use.
