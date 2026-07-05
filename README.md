@@ -6,8 +6,10 @@ each of ~64 English sentences written by an LLM; those scores are features for a
 classical head. No fine-tuning anywhere — task adaptation lives in the sentences.
 
 **See [METHOD.md](METHOD.md)** for the full process and the measurement behind every design
-choice. TREC-6 with 2k training examples: 0.916–0.938 test accuracy across seeds, ~7 minutes and
-under $0.01 per fit; 0.946 with the larger encoder.
+choice. TREC-6 with 2k training examples, current recipe (seed 7): **0.934** test accuracy at `-m`
+and **0.954** at `-l`, ~7 minutes and under $0.01 per fit. (The original instruction spanned
+0.916–0.938 across seeds at `-m`; the answer-oriented instruction below is what raised the `-m`
+number.)
 
 ## Current best recipe
 
@@ -25,8 +27,12 @@ The configuration that wins on TREC today (`configs/trec_best_l.yaml`):
   prune confident deaths, refill against confusion hot-spots → repeat to a held-out plateau.
 - **CV-selected classical head** (RF / HistGBM) over the entail+contradict features.
 
-Result: **0.954** test accuracy at `-l` (0.916–0.938 at `-m`), ~7 min and <$0.01 per fit, and the
-model is a human-readable list of ~64 English sentences.
+Result (seed 7): **0.934** at `-m`, **0.954** at `-l`. The answer-oriented instruction is what
+lifts `-m` — the original instruction scored 0.920 at the same seed/dedup (`trec`), the
+answer-oriented one 0.934 (`trec_newinstr`, +0.014). At `-l` that gain washes into the ~0.95
+saturation band (`baseline_l` 0.952), so the instruction is only measured to help at `-m`. The new
+instruction is currently validated at seed 7 only. ~7 min and <$0.01 per fit, and the model is a
+human-readable list of ~64 English sentences.
 
 **Add the lexical channel when inference cost matters** (`configs/trec_best_l_max.yaml`:
 `lexical: {kind: tfidf_svd, dims: 128}`). TF-IDF is ~free at prediction time, while every NLI
