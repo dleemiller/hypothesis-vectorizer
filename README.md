@@ -19,8 +19,8 @@ The configuration that wins on TREC today (`configs/trec_best_l.yaml`):
   p=0.024). Everything else below is within noise at `-l`; the encoder is where the accuracy is.
 - **Hand-written answer-oriented instruction** (the code default) — each hypothesis describes both
   the question and the *answer form* it implies (e.g. *"equivalent to asking someone to name a
-  person"* / *"can be answered with a short proper name"*). GEPA-tuning this instruction is neutral
-  (McNemar p≈1.0), so it stays hand-written.
+  person"* / *"can be answered with a short proper name"*). Automated tuning of this instruction
+  was neutral (McNemar p≈1.0), so it stays hand-written.
 - **Covariance dedup** — reject a candidate whose entail-score vector correlates >0.95 with a kept
   hypothesis (removes *behavioral* duplicates that text-similarity dedup misses).
 - **Pool of 64, evolved** — generate → rank by CV permutation-importance + cross-fold stability →
@@ -57,26 +57,36 @@ uv run pre-commit install
 
 ## Usage
 
+Training (produces a pool) needs the `train` extras (`dspy`, dataset loading, CLI):
+
 ```bash
 uv run nli-boost run configs/trec.yaml            # full method: generate -> evolve -> head -> test
 uv run nli-boost run configs/trec_finalize_l.yaml # reuse a fitted pool, re-score with -l encoder
 uv run nli-boost report                           # pool_cv results across runs
-uv run nli-boost diagnose runs/trec               # error decomposition + reward-hacking flags
 uv run nli-boost compare runs/a runs/b            # paired McNemar: is a delta real or noise?
-uv run nli-boost gepa-tune --fresh                # (optional) GEPA-tune the proposer instruction
 ```
 
-### Optional: instruction tuning (GEPA)
+### Inference: `HypothesisVectorizer`
 
-`gepa-tune` optimizes the proposer's `GeneratePool` instruction offline (dspy GEPA, `auto` budget)
-against a composite, **grounded-boolean** reward — noise-averaged held-out CV accuracy + a semantic
-judge (yes/no criteria, no ungrounded float scores) − an artifact penalty, aggregated across
-datasets by geometric mean. Tune on several domains and hold one out; load the result in any config
-via `lm: {instruction_path: models/proposer_instruction.json}`.
+Inference needs **no LM and no dspy** — just the encoder and the fitted hypothesis list. The model is
+a scikit-learn transformer, so it composes the usual ways:
 
-Measured verdict: the tuned instruction **matched** the hand-written one at `-l` (0.946, McNemar
-p=1.0) — the hand-written prompt is already near the ceiling and the **encoder is the real lever**
-— so this is a reusable research loop, not a default. See `NOTES.md` for the full audit.
+```python
+from nli_boost import HypothesisVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+vec = HypothesisVectorizer.from_run("runs/trec_best_l")     # config.yaml encoder + model.json pool
+Pipeline([("hyp", vec), ("clf", HistGradientBoostingClassifier())]).fit(texts, y)
+
+# score one text column alongside other tabular features:
+#   ColumnTransformer([("hyp", HypothesisVectorizer(hyps), "text"), ("num", StandardScaler(), num_cols)])
+# optional TF-IDF channel, plain sklearn:
+#   FeatureUnion([("nli", HypothesisVectorizer(hyps)), ("tfidf", make_pipeline(TfidfVectorizer(), TruncatedSVD(128)))])
+```
+
+`get_feature_names_out()` returns the hypotheses themselves, so feature importances stay readable.
+Install inference-only with `pip install nli-boost` (core deps); add `[train]`-group deps to generate pools.
 
 Artifacts per run in `runs/<run_name>/`: the pool itself (`model.json` — the model is a list of
 English sentences), the evolution audit trail (`log.jsonl`: every prune with its reason, every
@@ -91,5 +101,4 @@ uv run ruff check .    # also enforced via pre-commit
 ```
 
 The pre-rewrite exploratory code (trees, boosting, and the experiments that selected this method)
-is archived untracked in `src-bak/`; the experiment log lives in `NOTES.md`. (The live instruction
-tuner is `src/nli_boost/gepa_tune.py` + `reward.py`, distinct from the archived tree-era GEPA.)
+is archived untracked in `src-bak/`; the experiment log lives in `NOTES.md`.

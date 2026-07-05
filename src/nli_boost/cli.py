@@ -59,27 +59,6 @@ def report(runs_dir: Path = Path("runs")):
 
 
 @app.command()
-def diagnose(run_dir: Path):
-    """Decompose a run's error: coverage vs redundancy vs fit gaps vs label noise vs artifacts."""
-    from .diagnostics import diagnose_run
-
-    d = diagnose_run(run_dir)
-    console.print(f"accuracy: {d['accuracy']}  fit gaps: {d['fit_gaps']}")
-    console.print(
-        f"redundancy: {d['redundancy']['n_hypotheses']} hypotheses, "
-        f"effective rank {d['redundancy']['effective_rank']}"
-    )
-    console.print("per-class F1: " + ", ".join(f"{c['class']} {c['f1']}" for c in d["per_class"]))
-    for c in d["confusion_coverage"]:
-        mark = "[red]⚠[/red]" if "GAP" in c["verdict"] else "·"
-        console.print(f"{mark} {c['pair']}: best separator AUC {c['best_separator_auc']}")
-    for f in d["length_artifact_flags"]:
-        console.print(f'[red]⚠ length artifact[/red] r={f["length_corr"]}: "{f["hypothesis"][:70]}"')
-    n = d["suspected_label_noise"]["confident_errors"]
-    console.print(f"suspected label noise: {n} confident errors | full report: {run_dir}/diagnostics.json")
-
-
-@app.command()
 def compare(run_a: Path, run_b: Path):
     """Paired McNemar test: is run_b's accuracy difference from run_a real or noise?"""
     from .compare import compare_runs
@@ -101,31 +80,6 @@ def compare(run_a: Path, run_b: Path):
         else "[yellow]not significant[/yellow] — within noise"
     )
     console.print(f"verdict: {verdict}")
-
-
-@app.command("gepa-tune")
-def gepa_tune(
-    out: Path = Path("models/proposer_instruction.json"),
-    tune: str = "trec:7,sst2:7",
-    teacher: str = "openrouter/deepseek/deepseek-v4-pro",
-    judge: str = "openrouter/deepseek/deepseek-v4-pro",
-    auto: str = "light",
-    threads: int = 8,
-    fresh: bool = False,
-):
-    """Offline GEPA tuning of the GeneratePool instruction (dspy auto budget). `tune` = comma
-    list of dataset:seed contexts (hold out any dataset used for the accept gate). `auto` is the
-    budget preset (light|medium|heavy). `threads` = concurrent metric evals (parallel OpenRouter
-    calls). --fresh wipes this out's checkpoint before starting; else re-running resumes."""
-    from .gepa_tune import optimize_instruction
-
-    specs = [(p.split(":")[0], int(p.split(":")[1])) for p in tune.split(",")]
-    r = optimize_instruction(
-        out, specs, reflection_model=teacher, judge_model=judge, auto=auto, threads=threads, fresh=fresh
-    )
-    console.print(f"[bold]baseline reward geo-mean:[/bold] {r['baseline_geo_mean']}")
-    console.print(f"[bold]tuned instruction saved:[/bold] {r['saved_to']}")
-    console.print(f"\n[dim]{r['tuned_instruction']}[/dim]")
 
 
 if __name__ == "__main__":

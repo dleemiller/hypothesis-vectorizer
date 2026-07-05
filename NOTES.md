@@ -1699,3 +1699,15 @@ shipped its DRIFTED last pool and got 0.964).
 => Both this-session additions fail to earn their keep: checkpoint-best (redundant/harmful),
 grow-then-select+accept-gate (overfits, -0.016 test, p=0.02). Strengthens option (a) REVERT to
 blind-swap. Awaiting Lee's decision.
+
+## 2026-07-05 — YAGNI cuts (1/2/3): revert grow-select, delete GEPA + diagnostics
+
+Per Lee. (1) REVERTED evolve to blind-swap (git checkout a595fae for evolve.py/runner.py/
+test_evolve.py) — keeps the lexical-aware marginal-over-TF-IDF pruning, drops the grow-then-select
+loop + accept gate + checkpoint-best (they overfit: test -0.016 p=0.02; checkpoint-best was redundant
+with the accept gate). Evolve returns (pool, history) again; no checkpoints.jsonl. (2) DELETED the
+GEPA subsystem — gepa_tune.py, reward.py, test_gepa_tune.py, test_reward.py, cli `gepa-tune` (verdict:
+tuned instruction ties hand-written, p≈1.0 — no measured benefit). (3) DELETED diagnostics.py + cli
+`diagnose` (superseded by `compare`). Also dropped dead wordllama earlier. No dangling refs; 23 tests
+pass; ruff clean. Inference is now the sklearn HypothesisVectorizer (dspy-free); training deps in the
+`train` group. Net: smaller, one featurization path, no proven-neutral/negative machinery.
