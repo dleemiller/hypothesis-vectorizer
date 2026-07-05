@@ -43,7 +43,7 @@ class SplitNode(BaseModel):
     `separates` names what this node distinguishes; `hypotheses` implement that split."""
 
     depth: int
-    separates: str  # e.g. "named-entity classes vs the rest" (root) or "person vs place" (leaf)
+    separates: str  # a balanced group-vs-group split, e.g. "DESC/ABBR/NUM vs HUM/LOC/ENTY"
     hypotheses: list[str]
 
 
@@ -52,12 +52,14 @@ class GeneratePool(dspy.Signature):
         "Write hypotheses for a natural-language-inference model that will check, for each input "
         "text, whether the text entails each hypothesis. The entailment scores become features "
         "for a downstream classifier. Produce TWO complementary things:\n"
-        "(1) `tree` — imagine a DECISION TREE that classifies these texts and output its splits, "
-        "ROOT FIRST (depth 0). The root split's hypotheses separate the coarsest FAMILY of related "
-        "classes from the rest (GROUPING features); deeper nodes split a family into sub-groups; "
-        "leaf nodes separate two otherwise-similar classes (BOUNDARY features). Give a few "
-        "hypotheses per node and name what it `separates`. Use the class definitions to decide "
-        "which classes are similar.\n"
+        "(1) `tree` — imagine a BALANCED (as symmetric as possible) decision tree over the classes "
+        "and output its splits, ROOT FIRST (depth 0). At EVERY node, split the classes under it into "
+        "TWO GROUPS OF ROUGHLY EQUAL SIZE and write hypotheses TRUE for one group and FALSE for the "
+        "other — GROUPING features that span several classes at once. Do NOT peel one class vs the "
+        "rest: that duplicates the flat list and wastes the tree. The root splits ALL classes into "
+        "two halves (e.g. 'DESC, ABBR, NUM' vs 'HUM, LOC, ENTY'); recurse on each half with even "
+        "splits until leaves are single classes. Name what each node `separates` as 'group A vs "
+        "group B'. Use the class definitions to decide which classes belong together.\n"
         "(2) `hypotheses` — additional standalone hypotheses covering every class from multiple "
         "angles (topic, entity, intent, style, answer-oriented), as independent features.\n"
         "Every hypothesis from BOTH becomes a feature; keep them complementary, not redundant. " + _RULES
@@ -68,7 +70,7 @@ class GeneratePool(dspy.Signature):
     labeled_examples: list[str] = dspy.InputField(desc="sample texts with their true class")
     n: int = dspy.InputField(desc="total hypotheses to write across tree + list")
     avoid: list[str] = dspy.InputField(desc="statements already written; do not repeat or paraphrase")
-    tree: list[SplitNode] = dspy.OutputField(desc="decision-tree splits, root first (grouping -> boundary)")
+    tree: list[SplitNode] = dspy.OutputField(desc="BALANCED tree splits, root first; each is group-vs-group")
     hypotheses: list[Hypothesis] = dspy.OutputField(desc="additional diverse standalone hypotheses")
 
 
