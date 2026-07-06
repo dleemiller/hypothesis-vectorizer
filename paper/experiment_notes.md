@@ -1,0 +1,231 @@
+# Paper experiment notes
+
+Running log for the paper-production effort. Started 2026-07-06. This file records the
+repository audit, the experiment plan, and per-phase results as they land. It is the
+paper-oriented companion to the engineering log in `NOTES.md`.
+
+---
+
+## Phase 0 — Repository audit (2026-07-06)
+
+### Environment as checked out
+
+- **Machine:** RTX 5090 (32 GB), CUDA available and **idle** — the GPU that was blocked by an
+  external training job in the last `NOTES.md` entry is now free.
+- **Toolchain:** Python 3.13.9, `uv` 0.9.5. `uv sync` succeeds; `torch==2.12.1`,
+  `transformers==5.13.0`, `scikit-learn==1.9.0`, `sentence-transformers==5.6.0`, `dspy==3.2.1`.
+- **Tests:** `uv run pytest` → **40 passed, 1 skipped** (the skip is `check_estimator`'s
+  string-input case, expected). The suite runs entirely under fakes — no GPU or LM key needed.
+- **Prerequisites verified working (no API key needed):**
+  - HF dataset loading via `data.load` (TREC downloads and splits correctly).
+  - The finecat NLI cross-encoder (`dleemiller/finecat-nli-m`) loads on CUDA and scores pairs
+    through `EntailmentScorer.probs/.features` (label order entail=0, neutral=1, contradict=2).
+
+### What is ABSENT from this checkout (reproducibility gaps)
+
+The following are gitignored (`runs/`, `cache/`, `src-bak/`, `models/`, `.env`) and therefore **not
+present** — this is effectively a fresh checkout, and all prior experimental artifacts must be
+regenerated:
+
+- **No `runs/` directory.** Every result cited in `README.md`/`METHOD.md`/`NOTES.md`
+  (`runs/trec_best_l`, the 0.964 recipe, etc.) is gone. None of the headline numbers can be
+  reproduced without re-running.
+- **No NLI score cache.** Every experiment starts cold; first scoring pass per (encoder, corpus) is
+  full price, cached thereafter.
+- **No `.env` / `OPENROUTER_API_KEY`.** **This is the one hard blocker.** Hypothesis *generation*
+  (HV-static, HV-evolved, evolution refill, GEPA) is impossible without an LM. Everything else —
+  NLI scoring against a *given* pool, all baselines, zero-shot NLI, hand-written fixed-expert pools —
+  runs without it.
+
+### Current capabilities (what the code does well)
+
+- **Method core is solid and tested.** Frozen NLI cross-encoder → P(entail)/P(contradict) features →
+  CV-selected classical head (`EntailmentScorer`, `head.cv_selected_head`). Sklearn-native
+  `HypothesisVectorizer` transformer; `check_estimator` passes its applicable checks.
+- **Deterministic, leakage-safe splits.** `data.load` draws the **test split from its own fresh RNG
+  keyed on `seed` only** (`data.py:188`), so test is held fixed independent of train size — exactly
+  the property the low-N learning curve needs. K-shot sampling (`per_class_indices`) picks exactly
+  k/class.
+- **Honest evaluation protocol.** Head family + regularization chosen by 4-fold CV on train only,
+  then one test evaluation (`pool_cv`). This is the discipline the paper should foreground.
+- **Significance machinery.** `compare` does paired McNemar + Wilson CIs on a shared test set and
+  refuses mismatched test sets. This is paper-grade and rare in prompt-classification work.
+- **Evolution audit trail.** `log.jsonl` records every round's pool, held-out accuracy, each pruned
+  hypothesis with a human-readable failure reason, and refill target-AUCs. Strong raw material for
+  the interpretability section.
+- **Cost accounting.** `costs.json` tracks LM calls/tokens/USD, encoder pairs requested vs GPU-run
+  vs cache hits, wall time — directly feeds the cost/latency table.
+- **Built-in datasets:** TREC-6, AG News, SST-2, 20 Newsgroups (`_SPECS` in `data.py`), each with a
+  task string and one-line class descriptions.
+
+### Gaps vs. a publishable paper (prioritized)
+
+**Blocking the central thesis:**
+1. **No LM access (API key).** Blocks all LLM-generated pools. *Owner: user.*
+
+**Core research gaps (highest paper value):**
+2. **No low-N prior-aggregation / low-capacity head.** The only heads are a 300-tree RF and a
+   200-iter HGB grid (`head._GRID`) — run on ~30 rows at 5-shot, which `README.md` already flags as
+   overfitting (cv-train 0.80 ≫ test 0.67). **This is RQ1's central research task**, not just
+   plumbing: implement a class-tagged prior-aggregation head (N=0 → zero-shot NLI ensemble) and a
+   strongly-regularized linear head, and a shrinkage head interpolating between them
+   (`docs/low-n-plan.md`).
+3. **No learning-curve harness.** A run is single-seed / single-size. Need a sweep over
+   {1,2,3,5,10,20,50,100,all} examples/class × ≥5 seeds with **mean ± bootstrap/Wilson CIs**, fixed
+   test set, features cached once and reused across all points (cheap after the first scoring pass).
+
+**Missing baselines (reviewers will demand these):**
+4. **No runnable/reported baselines.** TF-IDF+logreg (word & char), sentence-embeddings+logreg,
+   and zero-shot NLI (class-template argmax) exist only as numbers quoted in docstrings. All three
+   are LM-free and buildable now. TF-IDF exists only as a *concatenated channel*, never standalone.
+
+**Missing experiment infrastructure:**
+5. **No ablation runner** (pool size, NLI encoder, evolve on/off, score_mode, dedup, head).
+6. **No config-driven text+tabular runner.** Capability exists only in `examples/cfpb.py` via the
+   sklearn `baseline_features` API; not wired into configs/CLI.
+7. **No results summarizer** beyond `report`'s flat `pool_cv` table — no seed aggregation, no
+   per-dataset roll-up, no LaTeX/markdown export.
+8. **No figure generation** (no matplotlib anywhere in `src/`).
+9. **No per-class metrics.** `evaluate` emits only accuracy/macro-F1/logloss — no per-class P/R/F1,
+   confusion matrix, or calibration (ECE).
+10. **Reproducibility artifacts:** no `manifest.json` (git hash, lib versions, dataset revision), no
+    saved split indices, no saved predictions/feature-importances. Splits are only *re-derivable*
+    from seed — fine until the HF data or sampling code drifts.
+
+**Missing datasets:** Banking77, CLINC150, GoEmotions have no loader; CFPB exists only as the
+`examples/cfpb.py` script (not integrated into `data.load`/CLI).
+
+### Opportunities to simplify / things to preserve
+
+- **Preserve:** the honest `pool_cv` protocol, McNemar `compare`, deterministic splits, cost
+  accounting, evolution audit trail. These are the project's methodological strengths and should be
+  foregrounded in the paper's Experiments section.
+- **The existing `docs/low-n-plan.md` is excellent** and already frames RQ1 correctly (the crossover
+  study: "the optimal configuration is a function of N"). The paper's low-N section should be built
+  directly on it. Do not re-derive.
+- **Version inconsistency to fix:** `__version__ = "0.3.0"` (`__init__.py`) vs packaging bumped to
+  0.4.0; encoder default differs between surfaces (`EncoderConfig` → `-m`, `HypothesisVectorizer` →
+  `-l`). Minor, worth aligning before release.
+
+### Where paper artifacts live (established this session)
+
+```
+paper/            draft.md, related_work.md, method.md, experiments.md, limitations.md,
+                  research_report.md, experiment_notes.md (this file), figures/, tables/
+experiments/      configs/{datasets,models,runs}/  scripts/  results/{raw,processed,tables,figures}/
+                  notebooks/
+```
+
+---
+
+## Phase 1 — Reproduce existing behavior + build infrastructure (2026-07-06)
+
+### Environment fixes
+
+- **Real bug fixed: SQLite cache fails on ZFS.** `ScoreCache` hard-coded `PRAGMA
+  journal_mode=WAL`; this machine's filesystem is **ZFS**, which accepts the WAL pragma but then
+  throws `disk I/O error` on the first write — *and that poisons the connection and the
+  half-created DB file*. Any real run on this machine would have crashed on cache creation. Fixed
+  `src/hypothesis_vectorizer/cache.py` to probe WAL support on a throwaway file, then open the
+  real cache directly in WAL (if supported) or DELETE (durable fallback) / MEMORY. `journal_mode`
+  is now an attribute. Full test suite still green (40 passed / 1 skipped).
+
+### Infrastructure built (LM-free, all runnable now)
+
+Package `experiments/hvexp/` + scripts `experiments/scripts/`:
+
+- `hvexp/repro.py` — `Manifest` (git commit, lib versions, dataset, seed, config hash),
+  `save_split` (persist exact train/test indices). **Closes the manifest/provenance gap.**
+- `hvexp/metrics.py` — accuracy, macro/weighted-F1, per-class P/R/F1, top-label **ECE
+  calibration**, bootstrap CIs. **Closes the per-class + calibration gap.**
+- `hvexp/features.py` — `NLIFeaturizer` reusing the library's cached `EntailmentScorer`; scores
+  a corpus once, every subsample is a cache hit.
+- `hvexp/hypotheses.py` — hand-written **class-tagged expert pools** + zero-shot class templates
+  for TREC / AG News / SST-2. Powers HV-fixed-expert, the prior head, and zero-shot NLI, all
+  LM-free.
+- `hvexp/datasets.py` — learning-curve protocol: full train pool + **one fixed test set**,
+  resample k/class across seeds. Reuses the library's samplers so splits match the CLI.
+- `hvexp/systems.py` — uniform pluggable systems: TF-IDF(word/char/union)+logreg,
+  embeddings+logreg, zero-shot NLI, `HVHead` (auto RF/HGB grid | L2-logreg-CV), and
+  **`PriorAggregation`** — the low-N prior head (class-tagged mean entailment; `fixed` = N=0
+  zero-shot ensemble, `reweight` = strong-L2). **Closes the baselines + low-N-head gaps.**
+- `scripts/run_learning_curve.py` — the harness (k × seeds × systems, one GPU pass, JSONL +
+  manifest). Ready for LLM pools via `--generated-pool` (adds `hv_generated_*` systems).
+- `scripts/summarize_results.py` — seed aggregation → mean+bootstrap-CI → markdown + **LaTeX** +
+  CSV tables.
+- `scripts/make_figures.py` — learning-curve figures with CI bands, **PDF + PNG**.
+- `scripts/inspect_hypotheses.py` — RQ2 interpretability: global permutation importance,
+  per-class hypotheses, redundancy clusters, cross-fold stability, per-hypothesis exemplars,
+  error cases with top-activating hypotheses → markdown report + CSV.
+- `scripts/run_ablation.py`, `scripts/run_text_tabular.py` — RQ4 / RQ5 runners (scaffolded).
+
+### Smoke validation (—m encoder, tiny sweep)
+
+Harness → summarizer → figures verified end-to-end. Even at smoke scale the low-N thesis shows:
+at 2/class, `hv_prior_fixed` (label-free) = 0.655 beat TF-IDF (~0.29–0.55), embeddings (~0.43),
+zero-shot NLI (0.39) **and** the RF/HGB `auto` head (~0.50–0.57) — the RF/HGB overfitting at low
+N is real and the prior head is the fix, exactly as `docs/low-n-plan.md` predicted.
+
+### RESULT: full TREC `-l` baseline learning curve (10 seeds, fixed 500-test)
+
+`experiments/configs/runs/trec_lown_baselines.yaml`; `lc_trec_baselines_l`. Test **accuracy**,
+mean over 10 seeds. Bold = best per column.
+
+| system | 1 | 2 | 3 | 5 | 10 | 20 | 50 | 100 | all |
+|---|---|---|---|---|---|---|---|---|---|
+| **hv_prior_fixed** (label-free) | **0.594** | 0.594 | 0.594 | 0.594 | 0.594 | 0.594 | 0.594 | 0.594 | 0.594 |
+| **hv_prior_reweight** | 0.556 | **0.629** | **0.642** | 0.660 | 0.680 | 0.679 | 0.686 | 0.700 | 0.862 |
+| hv_expert_rf | 0.474 | 0.597 | 0.642 | **0.682** | **0.753** | **0.802** | **0.849** | **0.892** | **0.954** |
+| hv_expert_logreg | 0.364 | 0.517 | 0.547 | 0.604 | 0.712 | 0.725 | 0.746 | 0.784 | 0.912 |
+| zeroshot_nli | 0.428 | 0.428 | 0.428 | 0.428 | 0.428 | 0.428 | 0.428 | 0.428 | 0.428 |
+| emb MiniLM+logreg | 0.301 | 0.400 | 0.431 | 0.486 | 0.574 | 0.649 | 0.703 | 0.742 | 0.856 |
+| tfidf word+char+logreg | 0.307 | 0.374 | 0.402 | 0.426 | 0.486 | 0.572 | 0.634 | 0.713 | 0.870 |
+| tfidf word+logreg | 0.315 | 0.362 | 0.374 | 0.414 | 0.475 | 0.542 | 0.560 | 0.623 | 0.852 |
+
+Figures: `experiments/results/figures/trec_learning_curve_{accuracy,macro_f1}.{pdf,png}`.
+Tables (md/LaTeX/CSV): `experiments/results/tables/trec_lown_*`.
+
+**Findings (all with the hand-written expert pool — NO LLM yet):**
+
+1. **The crossover is textbook and validates the whole low-N thesis.** At 1/class the *label-free*
+   prior-aggregation head (0.594) is best; at 2–3/class the reweighted prior (0.629/0.642) leads;
+   from ~5/class the flexible RF head takes over and climbs to **0.954** at full data. *The optimal
+   configuration is a function of N* — exactly the claim of `docs/low-n-plan.md`, now measured.
+2. **HV dominates both baselines at every N on TREC.** TF-IDF and MiniLM embeddings trail HV
+   throughout and only reach ~0.85–0.87 at full data vs HV's 0.954. (TREC is semantically clean and
+   NLI-favorable; do not over-generalize — the paper frames this as a favorable Pareto point, and
+   AG News / 20NG are expected to be harder for HV, per prior NOTES.)
+3. **Multi-hypothesis prior ≫ single-template zero-shot with zero labels:** 0.594 vs 0.428 (+16.6
+   pts). A standalone finding: an ensemble of readable hypotheses beats one class template per class.
+4. **The flexible-head low-N failure is real but graceful with RF.** A single HGB head *collapsed to
+   a constant class* (0.018) below 10/class — a degenerate artifact, not the documented failure —
+   so the sweep uses a RandomForest, which overfits gracefully (0.474 at 1/class, still > chance)
+   and reproduces the README's ~0.95 at full data. Recorded so we don't mis-report the HGB collapse.
+5. **Interpretability (RQ2) works out of the box** (`inspect_hypotheses.py`,
+   `results/processed/trec_expert_inspect_l/`): top hypotheses by permutation importance read as
+   plain English with class tags (LOC "asks where something is located" = 0.094; NUM "answered with
+   a numeric value" = 0.073), cross-fold-stable, and the redundancy detector flags the one near-dup
+   pair (person/identity, corr 0.92).
+
+**Compute note:** the RF/HGB CV-grid head (`cv_selected_head`, 52 fits/point) is too slow for a
+90-point × 10-seed sweep; the harness uses a single fast RF/HGB (`head="rf"`) for the curve and
+keeps the exact library grid available as `head="auto_full"` for headline single points.
+
+---
+
+## Phase 2 — LLM hypothesis generation (PENDING USER GO — will spend LM budget)
+
+Per the chosen "build + baselines, then pause" mode, generation is held until approval. The
+OpenRouter key is stored (`.env`, gitignored) and auth-validated. When approved:
+
+1. **Generate HV pools on TREC** with the existing proposer (DeepSeek-v4-flash via
+   `HypothesisVectorizer.fit` / the `run` CLI), using ONLY the low-N training sample for each
+   point (strict low-N, no test leakage). Two pool variants: static (generate+dedup) and evolved.
+   Save each as `{text,intended_class}` JSON. Est. ~$0.01–0.07/pool.
+2. **Extend the learning curve** with `--generated-pool` → `hv_generated_auto`,
+   `hv_generated_logreg`, `hv_generated_prior_fixed`. Compare against the expert pool and the
+   baselines already measured. This is the paper's central low-N result.
+3. **Leakage discipline:** hypotheses generated per-N from that N's train sample only; NLI cache
+   keyed on (text, hyp, model) so no cross-contamination; test never inspected.
+
+_(Further phases appended as they run.)_
