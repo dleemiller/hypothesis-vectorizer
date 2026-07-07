@@ -1,0 +1,12 @@
+# TREC-6 low-label learning curve — LM-free baselines + HV-fixed-expert + prior heads.
+# Reproduce: uv run python experiments/scripts/run_learning_curve.py --config <this file>
+dataset: trec
+encoder: dleemiller/finecat-nli-l   # the paper's capacity knob; -m for fast prototyping
+device: cuda
+shots: [1, 2, 3, 5, 10, 20, 50, 100, all]
+seeds: 10                            # >=5, preferably 10 (docs/low-n-plan.md)
+test_size: 2000                      # TREC test has 500; fixed across all train sizes/seeds
+test_seed: 7
+systems: baselines                   # tfidf(word/char/union), embeddings, zero-shot NLI,
+                                     # hv_expert_auto, hv_expert_logreg, hv_prior_fixed/reweight
+run_id: lc_trec_baselines_l

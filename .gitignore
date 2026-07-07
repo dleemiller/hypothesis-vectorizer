@@ -217,11 +217,14 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# nli-boost artifacts
-runs/
-cache/
+# nli-boost artifacts (root-anchored so experiments/configs/runs/ stays trackable)
+/runs/
+/cache/
 
 # rewrite archive + model artifacts
 src-bak/
 models/
 models_*/
+
+# CFPB raw data — publicly regenerable via experiments/scripts/prep_cfpb.py (keep repo light)
+experiments/results/cfpb/*.csv
