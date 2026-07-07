@@ -183,13 +183,42 @@ probe, while staying interpretable and LLM-free*. (The label-free prior head imp
 0.392, but averaging 256 auto-tagged hypotheses into 77 classes stays weak — the learned head is
 where the large pool pays off.)
 
+### Table 5e — SST-2 (binary sentiment). Test accuracy.
+
+| System | 1 | 2 | 5 | 10 | 50 | 100 | all |
+|---|---|---|---|---|---|---|---|
+| **HV prior (0 labels)** | **.953** | **.953** | **.953** | **.953** | **.953** | **.953** | **.953** |
+| HV expert + logreg | .950 | .950 | .950 | .950 | .952 | .952 | .952 |
+| zero-shot NLI | .947 | .947 | .947 | .947 | .947 | .947 | .947 |
+| MiniLM emb + logreg | .486 | .530 | .581 | .637 | .721 | .707 | .815 |
+| TF-IDF (word+char) | .492 | .511 | .517 | .549 | .605 | .630 | .826 |
+
+**Read:** sentiment is *near-solved by the NLI prior* — the label-free HV prior head reaches **0.953
+at every budget** and never needs data, beating zero-shot NLI (0.947) and crushing TF-IDF/embeddings,
+which sit near chance at low N (~0.49) and only reach ~0.82 even at the full 67k-example train set.
+The most extreme "prior alone wins" case: HV dominates at *every* budget and the data-driven
+baselines never catch up.
+
 ### Synthesis: HV's advantage is a function of task structure
 
 | Task type | Dataset | What wins at low N | HV verdict |
 |---|---|---|---|
-| Small clean taxonomy | TREC-6 | HV (prior → RF) | **HV dominates at all N** |
+| Small clean taxonomy | TREC-6 | HV (prior → RF) | **HV dominates at all N**; fine-tune crosses at ~5–10/class |
+| Sentiment | SST-2 | HV prior (0.953) | **NLI prior near-solves it; HV wins at every N** incl. full data |
 | Broad topics | AG News | zero-shot NLI / HV prior | NLI prior near-ceiling; learned head adds little |
 | Fine-grained many-class | Banking77 | dense embeddings | thin 24-hyp pool loses; **256-hyp generated pool reaches embedding parity** (Table 5c) |
+
+### Table 5d2 — method ablations (TREC, 100 examples/class, RF head, 5 seeds)
+
+| axis | variant → accuracy |
+|---|---|
+| **NLI encoder (capacity lever)** | finecat-nli-**m** 0.798 → finecat-nli-**l** **0.892** (**+0.094**) |
+| score channel | entail 0.886 · contrast 0.888 · entail+contradict 0.892 (within noise) |
+
+**Read:** the **frozen NLI encoder is by far the dominant lever** (+9.4 pts from -m→-l on the *same*
+hypotheses), dwarfing the score-channel choice, which is within seed noise under a flexible head
+(entail+contradict marginally best, kept as default). Capacity lives in the encoder; the other knobs
+are second-order.
 
 ## Table 5d — RQ4: pool-size scaling (how many hypotheses?)
 

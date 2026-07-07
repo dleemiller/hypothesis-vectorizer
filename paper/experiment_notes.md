@@ -368,4 +368,19 @@ baseline), **crosses HV at ~5–10/class**, and **wins the data-rich regime** (0
 a fine-tuned encoder owns ≥20/class but is opaque and data-hungry. Recipe: AdamW lr 2e-5, 20 epochs
 capped at 1000 steps, max_len 128; ~15–40s/fit.
 
+## Phase 8 — optional: SST-2 + method ablations (2026-07-07)
+
+**SST-2 (binary sentiment, `lc_sst2_baselines_l`, -l, 5 seeds).** The NLI prior near-solves it:
+label-free HV prior head = **0.953 at every budget**, > zero-shot NLI 0.947, while TF-IDF/embeddings
+sit near chance at low N (~0.49) and reach only ~0.82 at the full 67k train set. HV wins at *every*
+budget incl. full data — the most extreme "prior alone wins" case (fourth generality pattern,
+reinforcing AG News). Figure `sst2_learning_curve_accuracy.pdf`.
+
+**Method ablations (TREC, 100/class, RF head, 5 seeds; `abl_trec_{scoremode,encoder}`).**
+- Encoder is the dominant lever: finecat-nli-m 0.798 → -l **0.892 (+0.094)** on the same pool.
+- Score channel within seed noise: entail 0.886 · contrast 0.888 · entail+contradict 0.892
+  (default kept). Capacity lives in the encoder; other knobs are second-order — confirms METHOD.md.
+- (Switched the ablation's score_mode/encoder axes to a single RF head; the CV grid was needlessly
+  slow and the comparison is head-independent.)
+
 _(Further phases appended as they run.)_

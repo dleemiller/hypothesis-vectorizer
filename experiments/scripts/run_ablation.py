@@ -73,7 +73,7 @@ def variants_for_axis(axis: str, *, pool: list[str], featurizers: dict[str, NLIF
         fz = featurizers[primary]
         for mode in ("entail_contradict", "entail", "contrast"):
             out.append((mode, primary,
-                        S.HVHead(n_classes, pool, fz, head="auto", score_mode=mode, seed=seed)))
+                        S.HVHead(n_classes, pool, fz, head="rf", score_mode=mode, seed=seed)))
     elif axis == "head":
         fz = featurizers[primary]
         for head in ("auto", "logreg_cv"):
@@ -91,7 +91,7 @@ def variants_for_axis(axis: str, *, pool: list[str], featurizers: dict[str, NLIF
     elif axis == "encoder":
         for enc in encoders:
             out.append((enc, enc,
-                        S.HVHead(n_classes, pool, featurizers[enc], head="auto",
+                        S.HVHead(n_classes, pool, featurizers[enc], head="rf",
                                  score_mode="entail_contradict", seed=seed)))
     else:
         raise ValueError(f"unknown axis {axis!r}")

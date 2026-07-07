@@ -191,14 +191,26 @@ The 6-way task saturates by ~32–64 hypotheses (its "≈30 useful semantic dire
 77-way task keeps improving to ~128–192 before plateauing near 256. Pool size is therefore a
 task-dependent knob, not a fixed hyperparameter.
 
+**The encoder is the dominant lever.** Holding the pool fixed and swapping only the frozen NLI
+encoder moves TREC accuracy from 0.798 (finecat-nli-m) to 0.892 (finecat-nli-l) — **+9.4 points** at
+100 examples/class — whereas the score channel (entailment only, contradiction only, or both) varies
+within seed noise (0.886–0.892) under a flexible head. Capacity lives in the measurement operator;
+the other knobs are second-order.
+
 ### 5.3 Generality: three task structures (RQ3)
 
 Running the same protocol on two further datasets yields three distinct patterns — the honest "where
 HV helps and where it doesn't" evidence.
 
-*Broad topics (AG News, 4 classes).* The NLI prior is already near-ceiling: zero-shot NLI (0.892) and
+*Sentiment (SST-2, 2 classes).* The prior *near-solves* the task: the label-free HV prior head
+reaches 0.953 at every budget and never needs data, above zero-shot NLI (0.947), while TF-IDF and
+embeddings sit near chance at low N (~0.49) and reach only ~0.82 at the full 67k-example train set.
+Here HV wins at *every* budget, including full data — the data-driven baselines never catch up.
+
+*Broad topics (AG News, 4 classes).* The NLI prior is again near-ceiling: zero-shot NLI (0.892) and
 the label-free prior head (0.858) win at every budget, HV's learned heads add little at low N, and
-TF-IDF is weak-but-climbing (0.32→0.81 by 100/class). On easy topic tasks the *prior alone* suffices.
+TF-IDF is weak-but-climbing (0.32→0.81 by 100/class). On tasks the NLI model already reads well, the
+*prior alone* suffices.
 
 *Fine-grained intent (Banking77, 77 classes).* With a thin 24-hypothesis expert pool HV **loses** to
 dense embeddings (0.53→0.89) and TF-IDF — the pool cannot span 77 intents (the prior head floors at
