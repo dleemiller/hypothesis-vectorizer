@@ -108,9 +108,9 @@ a fine-tuned DistilBERT; interpretability; generation/evolution/pool-size/encode
 ablations. See `paper/experiment_notes.md` for the full log and `paper/research_report.md` for tables.
 
 **Known limitations / good next steps:**
-- **Pin dataset revisions for CFPB.** `prep_cfpb.py` streams `BEE-spoke-data/consumer-finance-complaints`
-  without a pinned revision, so a regenerated CSV isn't guaranteed byte-identical. The committed
-  *pools* and *results.jsonl* are the durable artifacts; pin a revision for exact CSV reproduction.
+- **CFPB reproducibility:** `prep_cfpb.py` pins the HF dataset revision
+  (`088cc73…`, 2025-12-29), so a regenerated CSV is order-stable; the committed *pools* and
+  *results.jsonl* remain the durable artifacts. Bump `_CFPB_REVISION` deliberately for newer data.
 - **Single test split per dataset.** Learning curves resample the *train* draw over seeds but use one
   fixed test set; a few CFPB/ablation comparisons are single-split (deltas noted as "within noise").
 - **Interpretability + significance** (`inspect_hypotheses.py`, the `hypothesis-vectorizer compare`

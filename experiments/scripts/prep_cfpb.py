@@ -37,6 +37,10 @@ _CLOSED = {
     "Closed with explanation", "Closed without relief", "Closed",
 }
 _CATS = ["Product", "Company", "State", "Submitted via"]
+# Pin the HF dataset revision so a regenerated CSV is byte-reproducible (the stream is order-stable
+# at a fixed commit). Bump deliberately if you want newer complaints.
+_CFPB_HF = "BEE-spoke-data/consumer-finance-complaints"
+_CFPB_REVISION = "088cc7308d4afc2a880f2329d08e2f7a09188ec6"  # last modified 2025-12-29
 
 
 def load_frame(per_class: int | None = None, limit: int | None = None):
@@ -49,7 +53,7 @@ def load_frame(per_class: int | None = None, limit: int | None = None):
     import pandas as pd
     from datasets import load_dataset
 
-    ds = load_dataset("BEE-spoke-data/consumer-finance-complaints", split="train", streaming=True)
+    ds = load_dataset(_CFPB_HF, split="train", streaming=True, revision=_CFPB_REVISION)
     rows, kept = [], {0: 0, 1: 0}
     for r in ds:
         narrative = (r.get("Consumer complaint narrative") or "").strip()
