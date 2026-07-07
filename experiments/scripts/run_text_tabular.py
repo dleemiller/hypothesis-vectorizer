@@ -113,6 +113,8 @@ def main() -> None:
     ap.add_argument("--dataset-key", default=None, help="fall back to hvexp expert_pool if known")
     ap.add_argument("--encoder", default="dleemiller/finecat-nli-l")
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--max-text-chars", type=int, default=1200,
+                    help="truncate text before scoring (CFPB narratives: 512; must match pool gen)")
     ap.add_argument("--score-mode", default="entail_contradict")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--run-id", default=None)
@@ -166,7 +168,8 @@ def main() -> None:
     comps_te["tfidf"] = svd.transform(tfidf.transform(text[te]))
 
     if use_hv:
-        fz = NLIFeaturizer(encoder=args.encoder, device=args.device, verbose=True)
+        fz = NLIFeaturizer(encoder=args.encoder, device=args.device,
+                           max_text_chars=args.max_text_chars, verbose=True)
         t0 = time.time()
         print(f"[nli] warming cache: {len(text)} texts x {len(pool)} hyps on {args.encoder} ...")
         fz.features(list(text), pool, score_mode=args.score_mode)  # one pass over train+test

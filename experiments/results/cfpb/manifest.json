@@ -1,0 +1,38 @@
+{
+  "run_id": "cfpb_pool",
+  "created_utc": "2026-07-07T12:22:33Z",
+  "git_commit": "3b4d8b3-dirty",
+  "config": {
+    "per_class": 2000,
+    "n_hypotheses": 64,
+    "evolve": false,
+    "max_text_chars": 512,
+    "encoder": "dleemiller/finecat-nli-l",
+    "device": "cuda",
+    "lm": "openrouter/deepseek/deepseek-v4-flash",
+    "seed": 7,
+    "test_frac": 0.2,
+    "outdir": "experiments/results/cfpb"
+  },
+  "config_hash": "6f6ec4a9c791",
+  "seed": 7,
+  "dataset": "cfpb",
+  "encoder": "dleemiller/finecat-nli-l",
+  "pool_id": "cfpb_pool",
+  "libraries": {
+    "python": "3.13.9",
+    "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.39",
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "sklearn": "1.9.0",
+    "torch": "2.12.1+cu130",
+    "transformers": "5.13.0",
+    "sentence_transformers": "5.6.0",
+    "datasets": "5.0.0",
+    "cuda": "NVIDIA GeForce RTX 5090"
+  },
+  "n_hypotheses": 64,
+  "gen_seconds": 207.3,
+  "evolve": false,
+  "relief_rate": 0.5
+}

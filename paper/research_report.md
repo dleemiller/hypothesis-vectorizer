@@ -171,7 +171,40 @@ where the large pool pays off.)
 | Broad topics | AG News | zero-shot NLI / HV prior | NLI prior near-ceiling; learned head adds little |
 | Fine-grained many-class | Banking77 | dense embeddings | thin 24-hyp pool loses; **256-hyp generated pool reaches embedding parity** (Table 5c) |
 
-## Table 6 — Status of the research questions
+## Table 6 — RQ5: CFPB text+tabular marginal value
+
+Monetary-relief prediction on CFPB consumer complaints (narrative + Product/Company/State/channel
+metadata). Balanced 4,000-row sample (relief rate forced to 0.50 for a stable rank metric), random
+80/20 split, HistGradientBoosting head; HV pool = 64 hypotheses generated from **train narratives
+only**. The question is not "does text beat tabular" but **how much does each feature family add on
+top of the others**.
+
+| Feature configuration | # feat | Accuracy | Macro-F1 | ROC-AUC |
+|---|---:|---:|---:|---:|
+| tabular_only | 260 | 0.828 | 0.827 | 0.914 |
+| tfidf_only | 128 | 0.823 | 0.822 | 0.895 |
+| hv_only | 128 | 0.769 | 0.769 | 0.856 |
+| tabular + tfidf | 388 | 0.859 | 0.859 | 0.938 |
+| **tabular + hv** | 388 | 0.849 | 0.849 | **0.935** |
+| **tabular + tfidf + hv** | 516 | **0.870** | **0.870** | **0.945** |
+
+**Read — HV adds interpretable marginal value.** The structured metadata alone is a strong predictor
+(AUC 0.914 — company/product largely determine relief), and HV *alone* is the weakest single channel
+(0.856 < TF-IDF 0.895 < tabular). But HV is **complementary**: adding it to the tabular block lifts
+AUC by **+0.021** (0.914→0.935, ≈ TF-IDF's own +0.024 marginal contribution), and adding it on top of
+tabular+TF-IDF **still helps** (+0.007, best config 0.945) — signal neither structured fields nor
+lexical features capture. Crucially, that added signal is **auditable**: the contributing hypotheses
+are readable ("mentions a specific dollar amount the consumer lost or is owed", "demand for a refund
+or compensation", "emotional distress rather than a specific financial loss"). This is the practical
+claim — hypothesis features can be justified by their marginal value over existing structured
+features in a real, regulated pipeline.
+
+*Caveats:* balanced/random setup (AUC ~0.91–0.94) is **not** the temporal natural-rate benchmark
+(0.78 hybrid / 0.69 TF-IDF, Wang et al. 2026) — not directly comparable. The pool is static (no
+marginal-over-tabular pruning yet); the `--evolve` path that prunes hypotheses by marginal value
+over the tabular block is the natural next refinement.
+
+## Table 7 — Status of the research questions
 
 | RQ | Question | Status | Verdict so far |
 |---|---|---|---|
@@ -179,7 +212,7 @@ where the large pool pays off.)
 | RQ2 | Interpretability | **Done (TREC)** | Readable, stable, class-aligned importances |
 | RQ3 | vs standard representations | **Done (3 datasets)** | 3 distinct patterns; HV wins TREC, ties/loses on AG News/Banking77 |
 | RQ4 | Generation & evolution | **Done (TREC)** | Generated ≥ expert for learned heads; evolution minor lift |
-| RQ5 | Text + tabular (CFPB) | Pending | Runner built (`run_text_tabular.py`), not yet run |
+| RQ5 | Text + tabular (CFPB) | **Done (balanced)** | HV adds +0.021 AUC over tabular, +0.007 over tabular+TF-IDF (Table 6) |
 | — | Generality (AG News, Banking77) | **Done** | See Table 5a/5b; fine-tuned-encoder baseline still pending |
 
 ---

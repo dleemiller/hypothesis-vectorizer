@@ -311,4 +311,29 @@ at local ext `/tmp/hv_cache` — GPU went to 99% immediately (1.88M pairs scored
 future scoring passes with `HV_CACHE_DIR=/tmp/hv_cache`.** The canonical cache remains committed
 under `cache/` (gitignored) — copy it to the local dir before a big run.
 
+## Phase 5 — CFPB text+tabular (RQ5) — DONE (2026-07-07)
+
+Monetary-relief prediction; balanced 4,000-row sample, random 80/20 split, HGB head; 64-hyp pool
+generated from train narratives only (`experiments/scripts/prep_cfpb.py` → `run_text_tabular.py`,
+run `tt_cfpb_random`). ROC-AUC by feature config:
+
+| config | AUC | marginal |
+|---|---|---|
+| tabular_only | 0.914 | — |
+| tfidf_only | 0.895 | — |
+| hv_only | 0.856 | — |
+| tabular+tfidf | 0.938 | +0.024 vs tabular |
+| tabular+hv | 0.935 | **+0.021 vs tabular** |
+| tabular+tfidf+hv | **0.945** | **+0.007 over tabular+tfidf** |
+
+**HV features add interpretable marginal value over structured metadata** — +0.021 AUC over tabular
+(≈ TF-IDF's own +0.024), and +0.007 even on top of tabular+TF-IDF (best config 0.945). HV alone is
+the weakest single channel (0.856), but it is complementary and, unlike TF-IDF/embeddings,
+**auditable** — the contributing hypotheses are readable ("mentions a specific dollar amount the
+consumer lost or is owed", "demand for a refund or compensation", "emotional distress rather than a
+specific financial loss"). This is the applied/regulatory claim, confirmed.
+
+Caveats: balanced/random (AUC ~0.91–0.94) is NOT the temporal natural-rate benchmark (0.78/0.69).
+Pool is static; the `--evolve` marginal-over-tabular pruning path is the next refinement.
+
 _(Further phases appended as they run.)_
