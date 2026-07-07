@@ -8,7 +8,7 @@ from pydantic import AliasChoices, BaseModel, Field
 
 
 class DataConfig(BaseModel):
-    name: Literal["ag_news", "sst2", "trec", "20newsgroups", "banking77", "clinc150"]
+    name: Literal["ag_news", "sst2", "trec", "20newsgroups", "banking77", "clinc150", "goemotions"]
     train_size: int = 2000
     val_size: int = 500
     test_size: int = 2000

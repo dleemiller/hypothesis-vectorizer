@@ -169,6 +169,46 @@ _CLINC150_ZEROSHOT: list[str] = [
     f"The user's intent is {name.replace('_', ' ').lower()}." for name in _SPECS["clinc150"]["classes"]
 ]
 
+# ---------------------------------------------------------------------------
+# GoEmotions (Ekman single-label) emotion classification. Classes (index order matches data.py):
+#   0 anger  1 disgust  2 fear  3 joy  4 neutral  5 sadness  6 surprise
+# ---------------------------------------------------------------------------
+_GOEMOTIONS_EXPERT: list[tuple[str, str]] = [
+    # anger
+    ("The text expresses anger or irritation.", "anger"),
+    ("The writer sounds annoyed, frustrated, or resentful.", "anger"),
+    ("The text conveys rage or hostility toward someone or something.", "anger"),
+    # disgust
+    ("The text expresses disgust or revulsion.", "disgust"),
+    ("The writer finds something gross, distasteful, or offensive.", "disgust"),
+    # fear
+    ("The text expresses fear or being scared.", "fear"),
+    ("The writer sounds anxious, worried, or nervous.", "fear"),
+    # joy
+    ("The text expresses joy or happiness.", "joy"),
+    ("The writer sounds amused, delighted, or excited.", "joy"),
+    ("The text conveys love, gratitude, or admiration.", "joy"),
+    ("The writer is enthusiastic or in a positive mood.", "joy"),
+    # neutral
+    ("The text is neutral and expresses no strong emotion.", "neutral"),
+    ("The text is a factual or matter-of-fact statement.", "neutral"),
+    # sadness
+    ("The text expresses sadness or unhappiness.", "sadness"),
+    ("The writer sounds disappointed, grieving, or sorrowful.", "sadness"),
+    # surprise
+    ("The text expresses surprise or astonishment.", "surprise"),
+    ("The writer is amazed, shocked, or confused by something unexpected.", "surprise"),
+]
+_GOEMOTIONS_ZEROSHOT = [
+    "The text expresses anger or irritation.",  # anger
+    "The text expresses disgust or revulsion.",  # disgust
+    "The text expresses fear or anxiety.",  # fear
+    "The text expresses joy or happiness.",  # joy
+    "The text is neutral and expresses no particular emotion.",  # neutral
+    "The text expresses sadness or disappointment.",  # sadness
+    "The text expresses surprise or astonishment.",  # surprise
+]
+
 
 EXPERT_POOLS: dict[str, list[tuple[str, str]]] = {
     "trec": _TREC_EXPERT,
@@ -176,6 +216,7 @@ EXPERT_POOLS: dict[str, list[tuple[str, str]]] = {
     "sst2": _SST2_EXPERT,
     "banking77": _BANKING77_EXPERT,
     "clinc150": _CLINC150_EXPERT,
+    "goemotions": _GOEMOTIONS_EXPERT,
 }
 
 ZEROSHOT_TEMPLATES: dict[str, list[str]] = {
@@ -184,6 +225,7 @@ ZEROSHOT_TEMPLATES: dict[str, list[str]] = {
     "sst2": _SST2_ZEROSHOT,
     "banking77": _BANKING77_ZEROSHOT,
     "clinc150": _CLINC150_ZEROSHOT,
+    "goemotions": _GOEMOTIONS_ZEROSHOT,
 }
 
 

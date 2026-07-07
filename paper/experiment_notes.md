@@ -383,4 +383,23 @@ reinforcing AG News). Figure `sst2_learning_curve_accuracy.pdf`.
 - (Switched the ablation's score_mode/encoder axes to a single RF head; the CV grid was needlessly
   slow and the comparison is head-independent.)
 
+## Phase 9 — optional: GoEmotions (Ekman-7 emotion) (2026-07-07)
+
+Wired `goemotions` (single-label Ekman-7 mirror `Jsevisal/go_emotions_ekman_unilabel`, 7 classes:
+anger/disgust/fear/joy/neutral/sadness/surprise; 39,575 train). Baseline+expert curve
+`lc_goemotions_baselines_l` (-l, 5 seeds). Accuracy:
+
+| shots | 1 | 5 | 20 | 100 | all (39k) |
+|---|---|---|---|---|---|
+| HV expert-RF | .314 | .406 | .490 | .523 | .636 |
+| HV prior-reweight | .343 | .415 | .486 | .514 | .594 |
+| MiniLM emb | .180 | .267 | .341 | .368 | .611 |
+| TF-IDF (w+c) | .137 | .196 | .268 | .388 | **.674** |
+
+**The cleanest low-N crossover in the study.** Emotion is hard (absolute acc 0.32–0.67, neutral-heavy),
+but the shape is textbook: HV roughly doubles the baselines at 1/class and leads through 100/class,
+then TF-IDF overtakes at the full 39k train set. First non-fine-tune case where a simple baseline
+clearly wins data-rich — "ordinary models catch up as N grows." Fifth generality pattern. Figure
+`goemotions_learning_curve_accuracy.pdf`. Tests green after wiring (config Literal + data spec + pool).
+
 _(Further phases appended as they run.)_

@@ -199,6 +199,24 @@ which sit near chance at low N (~0.49) and only reach ~0.82 even at the full 67k
 The most extreme "prior alone wins" case: HV dominates at *every* budget and the data-driven
 baselines never catch up.
 
+### Table 5g — GoEmotions (Ekman-7 emotion). Test accuracy.
+
+| System | 1 | 3 | 5 | 10 | 20 | 50 | 100 | all (39k) |
+|---|---|---|---|---|---|---|---|---|
+| HV + RF head | .314 | **.402** | .406 | .463 | **.490** | .504 | **.523** | .636 |
+| HV prior (reweighted) | **.343** | .350 | **.415** | **.480** | .486 | **.517** | .514 | .594 |
+| HV prior (0 labels) | .320 | .320 | .320 | .320 | .320 | .320 | .320 | .320 |
+| zero-shot NLI | .319 | .319 | .319 | .319 | .319 | .319 | .319 | .319 |
+| MiniLM emb + logreg | .180 | .219 | .267 | .307 | .341 | .372 | .368 | .611 |
+| TF-IDF (word+char) | .137 | .164 | .196 | .232 | .268 | .337 | .388 | **.674** |
+
+**Read — the cleanest low-N crossover in the study.** Emotion is hard (modest absolute accuracy,
+0.32–0.67, a neutral-heavy 7-way task), but the *shape* is textbook: HV imports emotion priors and
+**roughly doubles the baselines at 1/class** (0.34 vs 0.14–0.18) and leads through 100/class — then,
+with **39k labeled examples, TF-IDF overtakes HV** (0.674 vs 0.636). This is the first non-fine-tune
+case where a simple supervised baseline clearly wins the data-rich regime, exactly the "ordinary
+models catch up as N grows" prediction — HV owns the low-label band, lexical features own data-rich.
+
 ### Synthesis: HV's advantage is a function of task structure
 
 | Task type | Dataset | What wins at low N | HV verdict |
@@ -206,6 +224,7 @@ baselines never catch up.
 | Small clean taxonomy | TREC-6 | HV (prior → RF) | **HV dominates at all N**; fine-tune crosses at ~5–10/class |
 | Sentiment | SST-2 | HV prior (0.953) | **NLI prior near-solves it; HV wins at every N** incl. full data |
 | Broad topics | AG News | zero-shot NLI / HV prior | NLI prior near-ceiling; learned head adds little |
+| Emotion | GoEmotions | HV (prior/RF) | **HV owns low-N (~2× baselines); TF-IDF overtakes at 39k** — clean crossover |
 | Fine-grained many-class | Banking77 | dense embeddings | thin 24-hyp pool loses; **256-hyp generated pool reaches embedding parity** (Table 5c) |
 
 ### Table 5d2 — method ablations (TREC, 100 examples/class, RF head, 5 seeds)

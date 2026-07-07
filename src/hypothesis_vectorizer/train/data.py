@@ -427,6 +427,32 @@ _SPECS = {
         task="Classify a virtual-assistant utterance into one of 150 intents, or out-of-scope (oos).",
         descriptions=_intent_descriptions(_CLINC150_CLASSES, "virtual-assistant user"),
     ),
+    "goemotions": dict(
+        # Single-label Ekman-grouped GoEmotions mirror: the native `simplified` config is MULTILABEL
+        # (a list of ints over 28 emotions), which the no-filter loader here cannot consume. This mirror
+        # is pre-collapsed to 7 single-label Ekman classes (6 basic emotions + neutral) with an int
+        # ClassLabel `labels` field, so it drops straight into `np.asarray(train[lf], dtype=int64)`.
+        hf="Jsevisal/go_emotions_ekman_unilabel",
+        revision="be5851241c507d83c14d4f276814750f37a421ec",  # pinned for reproducibility
+        text_field="sentence",
+        label_field="labels",
+        test_split="test",
+        # ClassLabel index order (alphabetical): 0 anger 1 disgust 2 fear 3 joy 4 neutral 5 sadness 6 surprise
+        classes=["anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise"],
+        task=(
+            "Classify a short Reddit comment by the Ekman emotion it expresses: anger, disgust, fear, "
+            "joy, sadness, surprise, or neutral (no strong emotion)."
+        ),
+        descriptions=[
+            "anger: annoyance, irritation, frustration, resentment, rage, or hostility",
+            "disgust: revulsion, distaste, or finding something gross, offensive, or repellent",
+            "fear: anxiety, worry, nervousness, dread, or being scared",
+            "joy: happiness, amusement, love, gratitude, admiration, excitement, or other positive feeling",
+            "neutral: no strong emotion — a factual, matter-of-fact, or emotionless statement",
+            "sadness: unhappiness, grief, disappointment, remorse, or sorrow",
+            "surprise: astonishment, amazement, shock, confusion, or reaction to the unexpected",
+        ],
+    ),
 }
 
 

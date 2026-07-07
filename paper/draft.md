@@ -212,6 +212,13 @@ the label-free prior head (0.858) win at every budget, HV's learned heads add li
 TF-IDF is weak-but-climbing (0.32→0.81 by 100/class). On tasks the NLI model already reads well, the
 *prior alone* suffices.
 
+*Emotion (GoEmotions, Ekman-7).* The cleanest crossover in the study, on a genuinely hard task
+(modest absolute accuracy, a neutral-heavy 7-way label set). HV imports emotion priors and roughly
+*doubles* the lexical and embedding baselines at 1/class (0.34 vs 0.14–0.18) and leads through
+100/class — but with the full 39k-example train set **TF-IDF overtakes HV** (0.674 vs 0.636). This is
+the textbook "ordinary supervised models catch up as labels grow": HV owns the low-label band,
+lexical features own the data-rich one.
+
 *Fine-grained intent (Banking77, 77 classes).* With a thin 24-hypothesis expert pool HV **loses** to
 dense embeddings (0.53→0.89) and TF-IDF — the pool cannot span 77 intents (the prior head floors at
 0.231, covering only its tagged classes). But this is a *pool-size artifact, not a method limit*:
