@@ -2066,3 +2066,11 @@ process-vs-cause explanation, creative-work names, role/title identity, spell-ou
 TAKEAWAY: tree-guided growth is a POOL-COMPRESSION method — near-max accuracy with 1/3 the
 inference cost, every hypothesis traceable to the exact confusion that demanded it (the
 interpretability story compounds: the pool is a MAP of where the task is hard).
+
+## 2026-07-08 — LAUNCH: seed-variance check of the from-scratch result (trec_tree_scratch_s17)
+The 0.962@21 headline needs an error bar before anything builds on it. Same config, seed 17 (new
+seed pool, new leaf-shot draws, new LM rollouts — full-pipeline variance, not just head variance).
+PRE-REGISTERED: prior seed studies measured tiny seed deltas (ag_news 0.0015, sst2 0.000);
+success = seed-17 accuracy in [0.955, 0.968] and pool size 18-26 with semantically similar (not
+identical) grown hypotheses -> the result is the METHOD's, not the seed's. A miss below 0.95 means
+the v1/v2 gap was luck and the claim gets retracted to "0.948-0.962 depending on seed".

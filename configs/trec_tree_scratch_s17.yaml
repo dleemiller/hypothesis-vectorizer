@@ -1,8 +1,8 @@
 # FROM-SCRATCH tree growth (the method's designed use, NOTES 2026-07-08): generate a small seed
 # pool (8), then grow by tree-guided LLM proposals. v3 polished a mature 32-pool (accuracy flat);
 # this decides whether organic growth is where the method earns its keep.
-run_name: trec_tree_scratch2
-seed: 7
+run_name: trec_tree_scratch_s17
+seed: 17
 
 data:
   name: trec
