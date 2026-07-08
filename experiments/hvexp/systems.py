@@ -80,6 +80,16 @@ def _proba_to_full(clf, X, n_classes: int) -> np.ndarray:
     return full
 
 
+def _cols_to_full(p: np.ndarray, classes: np.ndarray, n_classes: int) -> np.ndarray:
+    """Align a raw proba matrix (columns ordered by `classes`) to 0..n_classes-1."""
+    if p.shape[1] == n_classes and list(classes) == list(range(n_classes)):
+        return p
+    full = np.zeros((p.shape[0], n_classes), dtype=float)
+    for j, c in enumerate(classes):
+        full[:, int(c)] = p[:, j]
+    return full
+
+
 # --------------------------------------------------------------------------- lexical baselines
 class TfidfLogReg:
     def __init__(self, n_classes: int, analyzer: str = "word",
@@ -360,3 +370,171 @@ class PriorAggregation:
         clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.25))
         clf.fit(Str, y_train)
         return _proba_to_full(clf[-1], clf[:-1].transform(Ste), self.n_classes)
+
+
+# --------------------------------------------------------------- shrinkage heads (the low-N gap)
+# Both interpolate the label-free prior (owns 1-3/class) and a data-driven head (owns high N),
+# so one head traces a continuous curve across the whole sweep instead of hand-swapping heads by
+# N (docs/low-n-plan.md, "elegant unifying version"). Shrinkage is chosen on TRAIN ONLY.
+class PriorShrinkageBlend:
+    """Design A — convex blend of the label-free prior and a data-driven head.
+
+        p = lam * prior_proba + (1 - lam) * learned_proba
+
+    `lam` in [0,1] is CV-selected on train (grid includes 0 and 1). With <2 examples/class a CV
+    is impossible, so lam=1 -> the pure prior (the correct low-N default). The prior head is
+    label-free, so its train proba carries no leakage; the learned head is scored out-of-fold so
+    lam is picked fairly. learned='rf' matches the hv_expert_rf ceiling; 'logreg' is lighter.
+    """
+
+    def __init__(self, n_classes: int, pool: list[str], tags: list[str], class_names: list[str],
+                 featurizer: NLIFeaturizer, learned: str = "rf", temperature: float = 0.1,
+                 seed: int = 0, name: str | None = None):
+        self.prior = PriorAggregation(n_classes, pool, tags, class_names, featurizer,
+                                      mode="fixed", temperature=temperature)
+        self.n_classes = n_classes
+        self.pool = pool
+        self.fz = featurizer
+        self.learned = learned
+        self.seed = seed
+        self.name = name or f"hv_prior_shrink_blend_{learned}"
+
+    def _learned_est(self):
+        if self.learned == "logreg":
+            return make_pipeline(StandardScaler(),
+                                 LogisticRegression(max_iter=2000, C=0.5))
+        from sklearn.ensemble import RandomForestClassifier
+
+        return RandomForestClassifier(n_estimators=200, random_state=self.seed, n_jobs=4)
+
+    def run(self, train_texts, y_train, test_texts) -> np.ndarray:
+        prior_te = self.prior._softmax(self.prior._class_scores(test_texts))
+        _, counts = np.unique(y_train, return_counts=True)
+        if counts.min() < 2:  # cannot CV -> pure prior (lam=1)
+            return prior_te
+        from sklearn.model_selection import cross_val_predict
+
+        Xtr = self.fz.features(train_texts, self.pool, "entail_contradict")
+        Xte = self.fz.features(test_texts, self.pool, "entail_contradict")
+        prior_tr = self.prior._softmax(self.prior._class_scores(train_texts))  # label-free: no leak
+        folds = _safe_folds(y_train)
+        est = self._learned_est()
+        oof = cross_val_predict(est, Xtr, y_train, cv=StratifiedKFold(folds),
+                                method="predict_proba")
+        oof = _cols_to_full(oof, np.unique(y_train), self.n_classes)
+        best_lam, best = 1.0, -1.0
+        for lam in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
+            blend = lam * prior_tr + (1 - lam) * oof
+            acc = float((blend.argmax(axis=1) == y_train).mean())
+            if acc > best:
+                best, best_lam = acc, lam
+        est.fit(Xtr, y_train)
+        learned_te = _proba_to_full(est, Xte, self.n_classes)
+        return best_lam * prior_te + (1 - best_lam) * learned_te
+
+
+class PriorScheduleBlend:
+    """Design A v2 — deterministic shrinkage *schedule* (no fragile CV-lambda).
+
+        anchor  = prior_fixed        if k < 2      (label-free; the N=1 default)
+                = prior_reweight      if k >= 2     (best low-variance prior head)
+        lam(k)  = tau / (tau + k),    k = min examples/class     (monotone 1 -> 0 as k grows)
+        p       = lam * anchor_proba + (1 - lam) * learned_proba
+
+    `tau` is a SINGLE global constant (the crossover scale ~ examples/class where a flexible head
+    overtakes the prior), fixed a priori and held identical across datasets — if it needed
+    per-dataset tuning the schedule would be overfit. Removes the v1 CV-lambda dip at 2-3/class:
+    lambda is now a smooth function of N instead of an accuracy argmax over ~12-18 noisy rows.
+    Being a convex blend it matches the better endpoint at the extremes and interpolates between.
+    """
+
+    def __init__(self, n_classes: int, pool: list[str], tags: list[str], class_names: list[str],
+                 featurizer: NLIFeaturizer, tau: float = 4.0, learned: str = "rf",
+                 temperature: float = 0.1, seed: int = 0, name: str | None = None):
+        self.prior_fixed = PriorAggregation(n_classes, pool, tags, class_names, featurizer,
+                                            mode="fixed", temperature=temperature)
+        self.prior_rw = PriorAggregation(n_classes, pool, tags, class_names, featurizer,
+                                         mode="reweight", temperature=temperature)
+        self.n_classes = n_classes
+        self.pool = pool
+        self.fz = featurizer
+        self.tau = tau
+        self.learned = learned
+        self.seed = seed
+        self.name = name or f"hv_prior_sched_blend_{learned}"
+
+    def _learned_proba(self, train_texts, y_train, test_texts) -> np.ndarray:
+        Xtr = self.fz.features(train_texts, self.pool, "entail_contradict")
+        Xte = self.fz.features(test_texts, self.pool, "entail_contradict")
+        if self.learned == "logreg":
+            est = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, C=0.5))
+        else:
+            from sklearn.ensemble import RandomForestClassifier
+
+            est = RandomForestClassifier(n_estimators=200, random_state=self.seed, n_jobs=4)
+        est.fit(Xtr, y_train)
+        final = est[-1] if hasattr(est, "steps") else est
+        Xte_t = est[:-1].transform(Xte) if hasattr(est, "steps") else Xte
+        return _proba_to_full(final, Xte_t, self.n_classes)
+
+    def run(self, train_texts, y_train, test_texts) -> np.ndarray:
+        _, counts = np.unique(y_train, return_counts=True)
+        k = int(counts.min())
+        if k < 2:  # lambda = 1 -> pure label-free prior (cannot reweight or fit a head)
+            return self.prior_fixed._softmax(self.prior_fixed._class_scores(test_texts))
+        lam = self.tau / (self.tau + k)
+        anchor = self.prior_rw.run(train_texts, y_train, test_texts)
+        learned = self._learned_proba(train_texts, y_train, test_texts)
+        return lam * anchor + (1 - lam) * learned
+
+
+class PriorAnchoredLogReg:
+    """Design B — one multinomial logreg over the full hypothesis features with the label-free
+    prior wired in as (effectively unpenalized) offset features.
+
+    The design matrix is [alpha * prior_logits | scaled hyp-features]. The prior columns are
+    scaled up by `alpha`, so the tiny weights (~1/alpha) that use them are barely touched by L2 —
+    they act as an offset. Strong L2 at low N crushes the hyp-feature weights to ~0, leaving the
+    prior; as C grows (CV-selected on train) the data correction activates. Empirical-Bayes
+    shrinkage toward the prior, in a single model (contrast the blend, which mixes two fits).
+    """
+
+    def __init__(self, n_classes: int, pool: list[str], tags: list[str], class_names: list[str],
+                 featurizer: NLIFeaturizer, temperature: float = 0.1, alpha: float = 8.0,
+                 seed: int = 0, name: str | None = None):
+        self.prior = PriorAggregation(n_classes, pool, tags, class_names, featurizer,
+                                      mode="fixed", temperature=temperature)
+        self.n_classes = n_classes
+        self.pool = pool
+        self.fz = featurizer
+        self.alpha = alpha
+        self.name = name or "hv_prior_anchored_logreg"
+        self._scaler: StandardScaler | None = None
+
+    def _design(self, texts, fit: bool = False) -> np.ndarray:
+        plog = self.prior._class_scores(texts) / self.prior.temperature  # (n, n_classes)
+        X = self.fz.features(texts, self.pool, "entail_contradict")
+        if fit:
+            self._scaler = StandardScaler().fit(X)
+        Xs = self._scaler.transform(X)
+        return np.hstack([self.alpha * plog, Xs])
+
+    def run(self, train_texts, y_train, test_texts) -> np.ndarray:
+        Dtr = self._design(train_texts, fit=True)
+        Dte = self._design(test_texts)
+        _, counts = np.unique(y_train, return_counts=True)
+        if counts.min() < 2:  # cannot CV -> strong reg (leans on the prior offset)
+            best_c = 0.02
+        else:
+            folds = _safe_folds(y_train)
+            best_c, best = 0.02, -1.0
+            for c in (0.02, 0.05, 0.1, 0.25, 0.5, 1.0):
+                clf = LogisticRegression(max_iter=3000, C=c)
+                try:
+                    s = cross_val_score(clf, Dtr, y_train, cv=StratifiedKFold(folds)).mean()
+                except Exception:
+                    s = -1.0
+                if s > best:
+                    best, best_c = s, c
+        clf = LogisticRegression(max_iter=3000, C=best_c).fit(Dtr, y_train)
+        return _proba_to_full(clf, Dte, self.n_classes)

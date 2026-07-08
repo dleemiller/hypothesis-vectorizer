@@ -59,6 +59,12 @@ def build_systems(which: str, raw, fz: NLIFeaturizer, pool, tags, seed: int,
                                name="hv_prior_fixed"),
             S.PriorAggregation(n, pool, tags, raw.class_names, fz, mode="reweight",
                                name="hv_prior_reweight"),
+            S.PriorShrinkageBlend(n, pool, tags, raw.class_names, fz, learned="rf", seed=seed,
+                                  name="hv_prior_shrink_blend"),
+            S.PriorScheduleBlend(n, pool, tags, raw.class_names, fz, tau=4.0, learned="rf",
+                                 seed=seed, name="hv_prior_sched_blend"),
+            S.PriorAnchoredLogReg(n, pool, tags, raw.class_names, fz, seed=seed,
+                                  name="hv_prior_anchored_logreg"),
         ]
     for gname, (gpool, gtags) in (gen_pools or {}).items():
         out += [S.HVHead(n, gpool, fz, head="rf", seed=seed, name=f"hv_{gname}_rf"),
