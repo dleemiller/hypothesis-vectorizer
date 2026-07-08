@@ -254,6 +254,16 @@ frontier:** at 5 examples/class the default RF/HGB head overfits (128 features /
 ≫ test 0.67), so it barely clears zero-shot — the lighter low-N pipeline (prior-aggregation head, sts
 dedup, no evolution) is future work; see [docs/low-n-plan.md](docs/low-n-plan.md).
 
+## Paper & experiments
+
+The research paper built on this method — low-label learning curves, generality across five datasets,
+generation/evolution/pool-size ablations, text+tabular (CFPB), interpretability, and baselines
+including a fine-tuned encoder — lives in [`paper/`](paper/) (`research_report.md` for the result
+tables, `draft.md` for the full write-up). The reproducible harness and a reproduction/handoff guide
+are in [`experiments/`](experiments/) — see [`experiments/README.md`](experiments/README.md). Note:
+point the NLI cache at local disk (`export HV_CACHE_DIR=/tmp/hv_cache`) for GPU runs on networked
+filesystems.
+
 ## Development
 
 ```bash

@@ -14,7 +14,6 @@ from pathlib import Path
 import numpy as np
 
 _SCHEMA = """
-PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS nli_scores (
   text_hash TEXT NOT NULL,
   hyp_hash  TEXT NOT NULL,
@@ -29,15 +28,48 @@ CREATE TABLE IF NOT EXISTS texts      (text_hash TEXT PRIMARY KEY, text TEXT NOT
 _CHUNK = 500  # sqlite bound-variable limit safety
 
 
+def _wal_supported(directory: Path) -> bool:
+    """Whether WAL actually works on this filesystem, probed on a throwaway file.
+
+    ZFS and some network filesystems accept `PRAGMA journal_mode=WAL` yet fail with
+    'disk I/O error' on the first real write — and that error poisons both the connection and
+    the half-written main file. So we never attempt WAL on the real cache: we probe a temp file
+    (with an actual write), then open the real DB directly in the supported mode.
+    """
+    probe = directory / ".wal_probe.sqlite"
+    for suffix in ("", "-wal", "-shm"):
+        Path(str(probe) + suffix).unlink(missing_ok=True)
+    conn = None
+    ok = False
+    try:
+        conn = sqlite3.connect(probe)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.executescript("CREATE TABLE IF NOT EXISTS p(a TEXT PRIMARY KEY) WITHOUT ROWID;")
+        conn.execute("INSERT OR REPLACE INTO p VALUES('x')")  # the write that fails under bad WAL
+        conn.commit()
+        ok = True
+    except sqlite3.OperationalError:
+        ok = False
+    finally:
+        if conn is not None:
+            conn.close()  # must close even on failure — a leaked poisoned handle breaks later opens
+        for suffix in ("", "-wal", "-shm"):
+            Path(str(probe) + suffix).unlink(missing_ok=True)
+    return ok
+
+
 class ScoreCache:
     def __init__(self, path: str | Path):
+        self._lock = threading.Lock()
         if str(path) == ":memory:":  # ephemeral in-process cache (HypothesisVectorizer default)
             self._conn = sqlite3.connect(":memory:", check_same_thread=False)
+            self.journal_mode = "memory"
         else:
             path = Path(path)
             path.parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._lock = threading.Lock()
+            self.journal_mode = "WAL" if _wal_supported(path.parent) else "DELETE"
+            self._conn.execute(f"PRAGMA journal_mode={self.journal_mode}")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 

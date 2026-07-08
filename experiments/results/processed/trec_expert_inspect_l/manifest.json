@@ -1,0 +1,40 @@
+{
+  "run_id": "trec_expert_inspect_l",
+  "created_utc": "2026-07-06T18:00:53Z",
+  "git_commit": "d9f6dba-dirty",
+  "config": {
+    "dataset": "trec",
+    "encoder": "dleemiller/finecat-nli-l",
+    "device": "cuda",
+    "pool_json": null,
+    "train_size": 2000,
+    "test_size": 2000,
+    "top": 15,
+    "redundancy_threshold": 0.9,
+    "run_id": "trec_expert_inspect_l",
+    "seed": 7
+  },
+  "config_hash": "af2961d6211f",
+  "seed": 7,
+  "dataset": "trec",
+  "encoder": "dleemiller/finecat-nli-l",
+  "pool_id": "expert",
+  "libraries": {
+    "python": "3.13.9",
+    "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.39",
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "sklearn": "1.9.0",
+    "torch": "2.12.1+cu130",
+    "transformers": "5.13.0",
+    "sentence_transformers": "5.6.0",
+    "datasets": "5.0.0",
+    "cuda": "NVIDIA GeForce RTX 5090"
+  },
+  "cv_train_acc": 0.906,
+  "head_params": {
+    "kind": "hgb",
+    "learning_rate": 0.06,
+    "l2_regularization": 0.01
+  }
+}

@@ -34,7 +34,9 @@ def load_frame(limit: int, per_class: int | None = None):
     import pandas as pd
     from datasets import load_dataset
 
-    ds = load_dataset("BEE-spoke-data/consumer-finance-complaints", split="train", streaming=True)
+    # pinned revision so a regenerated sample is reproducible (bump deliberately for newer data)
+    ds = load_dataset("BEE-spoke-data/consumer-finance-complaints", split="train", streaming=True,
+                      revision="088cc7308d4afc2a880f2329d08e2f7a09188ec6")
     rows, kept = [], {0: 0, 1: 0}
     for r in ds:
         narrative = (r.get("Consumer complaint narrative") or "").strip()
