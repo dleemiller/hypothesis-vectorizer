@@ -1991,3 +1991,32 @@ leaf sat AT max_depth=6, so the tree could never USE the new features. Fix: unca
 on min_impurity_decrease=0.002 (measured: worst leaf n=456 H=1.78 -> n=80 H=0.99, 99 leaves, no
 shredding). v2 relaunched cache-warm; round 0 now targets the n=80 DESC/ENTY leaf (frontier moves).
 Bar unchanged: static-32 baseline 0.960; success > 0.965.
+
+## 2026-07-08 — TREE-EVOLVE v3 VERDICT (vs pre-registered expectations)
+Final config after Lee's live-debugging session: error-mass targeting, gate 0.002 with acceptance
+bar = split gate, best_of_n x4 parallel (dspy.Parallel), 24 leaf shots, 3-class features,
+inference-level prompt. Run: 8 rounds, 3 adds (32 -> 35 hyps), stopped on patience at the ABBR/DESC
+leaf (needed 28% leaf-entropy removal; best attempts 11-22%).
+
+RESULTS (all 5452 train, -l, seed 7):          acc     f1      logloss  cv_train
+  static-32 baseline (2-class AND 3-class):    0.960   0.9478  0.2697   0.9255
+  tree-evolved 35 (3-class):                   0.960   0.9473  0.2295   0.9290
+  (reference: stability method, 62 hyps:       0.964)
+
+VERDICT vs pre-registration:
+- ACCURACY: FLAT (0.960 = baseline). Success bar (>0.965) NOT met. The residual confusion the tree
+  surfaces (DESC/ENTY, ABBR/DESC leaves) is the encoder's known ceiling — 12 LLM attempts on the
+  ABBR/DESC leaf maxed at 22% of the 28% bar. Honest read: on an already-strong pool at full-data
+  TREC, tree-guided growth does not buy accuracy.
+- LOGLOSS: -15% (0.2697 -> 0.2295) — the 3 added hypotheses improve CALIBRATION materially. cv_train
+  +0.35pt. Real, unexpected win worth keeping.
+- EFFICIENCY angle: 0.960 with 35 hyps vs 0.964 with 62 (stability) — comparable accuracy at 44%
+  fewer hypotheses = cheaper inference. The tree method may be the better POOL-COMPRESSION tool.
+- HYPOTHESIS AUDIT: all 3 adds are clean semantic properties (characteristic-of-subject,
+  what/how/why description, list-answer) — zero surface features, zero leaf-overfit wording. The
+  prompt + novelty reward worked qualitatively.
+- 3-class features: identical baseline metrics to 2-class (0.960/0.9478/0.2697 both) — neutral adds
+  nothing for a static pool head on TREC; its value (if any) is inside tree targeting/attr-hyps.
+NEXT (needs decision, not compute): where tree-evolve should shine is FROM-SCRATCH growth (start
+size~8, grow to ~35) and LOW-N — not polishing a mature pool. Also 20newsgroups (more classes =
+more leaves = more room). Candidate experiments when Lee wants them.
