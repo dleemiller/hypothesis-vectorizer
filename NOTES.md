@@ -1978,3 +1978,16 @@ PRE-REGISTERED EXPECTATIONS:
 3. Mechanics: expect early rounds to target the known ENTY/DESC hot spot; info_gain per accepted
    round mostly > 0.1; some no-add rounds (dedup) are fine.
 Honest protocol: pool_cv only; one test eval each.
+
+## 2026-07-07 (late) — tree-evolve v2 in flight; depth-cap frontier bug found & fixed mid-experiment
+Live-watching v1 caught three design fixes (all Lee-directed, committed): (1) reward = leaf info
+gain x NOVELTY (1 - max|corr| vs existing pool features on the leaf) — v1's round-0 winner was
+redundant; (2) replaced dspy.Refine with our own loop feeding MEASURED LANGUAGE back ("correlates
+0.95 with EXISTING '<named hypothesis>'") + related_hypotheses input (top-10 existing hyps with leaf
+gain) — also halves LM latency; (3) SplitLeaf prompt pushes inference-level angles (ANTICIPATE THE
+ANSWER, imperative reduction) and bans surface features after v1 proposed "begins with 'What are
+the'". CRITICAL BUG (Lee spotted): 3 rounds accepted but the SAME 456-sample leaf every round — the
+leaf sat AT max_depth=6, so the tree could never USE the new features. Fix: uncap depth, gate splits
+on min_impurity_decrease=0.002 (measured: worst leaf n=456 H=1.78 -> n=80 H=0.99, 99 leaves, no
+shredding). v2 relaunched cache-warm; round 0 now targets the n=80 DESC/ENTY leaf (frontier moves).
+Bar unchanged: static-32 baseline 0.960; success > 0.965.
