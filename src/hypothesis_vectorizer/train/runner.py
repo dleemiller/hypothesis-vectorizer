@@ -66,11 +66,18 @@ def run(cfg: RunConfig, scorer=None, proposer=None, deduper=None, bundle=None) -
                 scorer, [bundle.train_texts[i] for i in sub], cfg.dedup.threshold, cfg.dedup.min_std
             )
 
-    # STAGE 1 — pool: generate, or reuse a previous run's (encoder finalization)
+    # STAGE 1 — pool: generate, or reuse a previous run's (encoder finalization / tree seed)
     if cfg.pool.from_run:
         pool = json.loads((cfg.runs_dir / cfg.pool.from_run / "model.json").read_text())["hypotheses"]
+        if cfg.pool.from_run_top:
+            pool = pool[: cfg.pool.from_run_top]
         _phase(f"reusing pool of {len(pool)} from {cfg.pool.from_run}")
         history: list[dict] = []
+        if cfg.pool.method == "tree" and cfg.pool.tree.rounds > 0:
+            from .tree_evolve import tree_evolve
+
+            _phase(f"tree-evolving reused pool (up to {cfg.pool.tree.rounds} rounds)")
+            pool, history = tree_evolve(bundle, pool, scorer, proposer, deduper, cfg.pool, cfg.seed)
     else:
         fixed = list(cfg.pool.fixed_hypotheses)
         _phase(f"generating pool of {cfg.pool.size}" + (f" (+{len(fixed)} fixed)" if fixed else ""))

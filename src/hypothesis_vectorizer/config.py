@@ -89,8 +89,11 @@ class PoolConfig(BaseModel):
     # must add marginal value over them — same mechanism as the TF-IDF channel).
     fixed_hypotheses: list[str] = []
     # reuse the pool from a previous run instead of generating: this is how a
-    # pool is finalized with a bigger encoder (hypotheses transfer; only re-score)
+    # pool is finalized with a bigger encoder (hypotheses transfer; only re-score).
+    # With method='tree' the reused pool is the STARTING pool and is tree-evolved —
+    # ideal for cache-warm experiments (only new proposals hit the GPU).
     from_run: str | None = None
+    from_run_top: int | None = None  # truncate the reused pool to its first N hypotheses
 
 
 class LexicalConfig(BaseModel):

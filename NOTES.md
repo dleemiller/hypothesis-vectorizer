@@ -1961,3 +1961,20 @@ READY-TO-FIRE GPU QUEUE (each has a pre-registered expectation above; run when G
    slots reallocate off the ag_news dead detectors (std 0.022-0.039); revert if it drops.
 5. Lower-priority: -l finalization of best pools; multi-pool 3-seed ensemble (error bars); 20newsgroups
    (pool 96); two-encoder (-m + -l) union for the scaling-law story.
+
+## 2026-07-07 — FIRST TREE-EVOLVE TEST (Lee's LLM-in-the-loop design), cache-warm, GPU shared
+Lee approved sharing the GPU (ASR at 31GB/98GB; our encoder ~3GB, batch 64). Cache-warm design:
+both runs seed from trec_full's pool (first 32 hyps; -l, full 5452 train — all scores cached), so
+GPU work is ONLY scoring newly proposed hypotheses (~few k pairs/round).
+- trec_tree32_base: the same 32-hyp pool, NO growth (tree.rounds 0) — the static baseline.
+- trec_tree32: tree-evolve 16 rounds, dspy.Refine x4, reward = normalized leaf info gain.
+PRE-REGISTERED EXPECTATIONS:
+1. Baseline pool_cv: BELOW trec_full's 0.964 (32 is half the pool) — guess 0.94-0.955.
+2. Tree run should recover a chunk of the gap vs the baseline (it targets exactly the residual
+   confusion). Success = tree_32+grown > base_32 by more than noise (~0.005); stretch = approaching
+   0.964 with fewer total hyps. Failure mode to watch: LLM proposals with high LEAF info gain that
+   don't generalize (leaf-overfit) -> pool_cv flat while log.jsonl gains look great. Read the
+   grown hypotheses for leaf-overfit wording (single-example tailoring).
+3. Mechanics: expect early rounds to target the known ENTY/DESC hot spot; info_gain per accepted
+   round mostly > 0.1; some no-add rounds (dedup) are fine.
+Honest protocol: pool_cv only; one test eval each.

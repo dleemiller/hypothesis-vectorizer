@@ -1,0 +1,33 @@
+# Tree-guided LLM-in-the-loop evolve, first real test (Lee's design, NOTES 2026-07-07).
+# Starts from trec_full's first 32 hypotheses (cache-warm); each round fits an entropy CART,
+# targets the most-confused leaf, and asks the LLM (dspy.Refine, reward = leaf info gain)
+# for ONE hypothesis that splits it. Only new proposals hit the GPU.
+run_name: trec_tree32
+seed: 7
+
+data:
+  name: trec
+  train_size: 5452
+  val_size: 0
+  test_size: 2000
+
+encoder:
+  model: dleemiller/finecat-nli-l
+  batch_size: 64  # polite batch: sharing the GPU with Lee's ASR training
+
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash
+
+pool:
+  from_run: trec_full
+  from_run_top: 32
+  method: tree
+  tree:
+    rounds: 16
+    refine_attempts: 4
+    strategy: refine
+    leaf_shots: 12
+    leaf_min_samples: 20
+    max_depth: 6
+    min_samples_leaf: 10
+    patience: 3

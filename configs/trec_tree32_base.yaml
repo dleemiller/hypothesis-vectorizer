@@ -1,0 +1,24 @@
+# BASELINE for the tree-evolve experiment: the same 32-hypothesis starting pool, NO growth.
+# 100% cache-warm (trec_full's pool + texts) — establishes what the static 32-subset scores.
+run_name: trec_tree32_base
+seed: 7
+
+data:
+  name: trec
+  train_size: 5452
+  val_size: 0
+  test_size: 2000
+
+encoder:
+  model: dleemiller/finecat-nli-l
+  batch_size: 64  # polite batch: sharing the GPU with Lee's ASR training
+
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash
+
+pool:
+  from_run: trec_full
+  from_run_top: 32
+  method: tree
+  tree:
+    rounds: 0  # no growth: this is the static baseline

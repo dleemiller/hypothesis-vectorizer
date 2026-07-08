@@ -116,3 +116,57 @@ def test_tree_evolve_dedups_and_stops_on_patience():
     assert pool == ["f1 noise one"]  # nothing added
     assert all(not h["added"] for h in history)
     assert proposer.calls == 2  # stopped after `patience` no-add rounds
+
+
+def test_runner_from_run_tree_evolves_reused_pool(tmp_path, fast_models, monkeypatch):
+    """from_run + method='tree': the reused (truncated) pool is the STARTING pool and grows."""
+    import json
+
+    from conftest import FakeProposer, make_bundle
+    from hypothesis_vectorizer.config import DataConfig, RunConfig
+    from hypothesis_vectorizer.train import runner as runner_mod
+    from hypothesis_vectorizer.train.runner import run
+
+    bundle = make_bundle()
+    cfg0 = RunConfig(
+        run_name="src",
+        data=DataConfig(name="trec"),
+        pool={"size": 4, "rounds": 0},
+        cache_dir=tmp_path / "cache",
+        runs_dir=tmp_path / "runs",
+    )
+    # first two are NOISE columns so the reused pool leaves the tree impure -> growth happens
+    run(
+        cfg0,
+        scorer=FakeScorer(),
+        proposer=FakeProposer([["f4 noise", "f5 noise", "f0 a", "f1 b"]]),
+        deduper=TextOnlyDeduper(),
+        bundle=bundle,
+    )
+
+    # tree run reuses the first 2 hypotheses and grows via split_leaf
+    tree_proposer = TreeFakeProposer("f1 b grows back")
+    monkeypatch.setattr(runner_mod, "Proposer", lambda *a, **k: tree_proposer)
+    cfg1 = RunConfig(
+        run_name="treed",
+        data=DataConfig(name="trec"),
+        pool={
+            "from_run": "src",
+            "from_run_top": 2,
+            "method": "tree",
+            # shallow tree: noise splits at depth 6 shred 100 samples below leaf_min_samples
+            "tree": {
+                "rounds": 2,
+                "max_depth": 2,
+                "leaf_min_samples": 10,
+                "min_samples_leaf": 10,
+                "patience": 1,
+            },
+        },
+        cache_dir=tmp_path / "cache",
+        runs_dir=tmp_path / "runs",
+    )
+    run(cfg1, scorer=FakeScorer(), proposer=tree_proposer, deduper=TextOnlyDeduper(), bundle=bundle)
+    model = json.loads((tmp_path / "runs" / "treed" / "model.json").read_text())
+    assert model["hypotheses"][:2] == ["f4 noise", "f5 noise"]  # truncation kept the first 2
+    assert tree_proposer.calls >= 1  # tree evolution actually ran on the reused pool
