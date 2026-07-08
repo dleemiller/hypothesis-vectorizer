@@ -82,7 +82,7 @@ class TreeConfig(BaseModel):
     # bounds shredding), train_acc 0.906->0.920, and the remaining impure leaves are GENUINE
     # confusion rather than gate-suppressed splits.
     max_depth: int | None = None
-    min_impurity_decrease: float = 0.001
+    min_impurity_decrease: float = 0.0005
     min_samples_leaf: int = 10
     patience: int = 3  # stop after this many consecutive rounds that add no new hypothesis
 
