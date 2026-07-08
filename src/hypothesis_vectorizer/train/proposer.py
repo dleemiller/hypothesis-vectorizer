@@ -108,10 +108,23 @@ class SplitLeaf(dspy.Signature):
         "cannot tell apart (the `confused_examples`, with their true labels). Write ONE new NLI "
         "hypothesis whose ENTAILMENT SCORE would best SEPARATE those classes — high for some of the "
         "confused classes and low for the others. Study what the examples of each class share that "
-        "the OTHER classes in this leaf do NOT, and name that distinguishing property. The "
-        "`related_hypotheses` are what the model ALREADY has for this leaf, each with the fraction "
-        "of the leaf's confusion it resolves — they are INSUFFICIENT, and a paraphrase of one of "
-        "them will score zero (its signal is already measured): write a hypothesis reading a "
+        "the OTHER classes in this leaf do NOT, and name that distinguishing property.\n"
+        "The NLI encoder scores MEANING, not wording — exploit its ability to INFER. The strongest "
+        "angles, in rough order:\n"
+        '- ANTICIPATE THE ANSWER: state what answering the text would produce or require ("The '
+        'text can be answered with a single named entity." / "Answering the text requires '
+        'explaining a process or cause." / "The answer would be a quantity, date, or measurement.")\n'
+        '- IMPERATIVE REDUCTION: what the text is really asking someone to do ("The text is '
+        'equivalent to asking someone to define a term." / "...to name a member of a category.")\n'
+        "- IMPLIED INTENT: the unstated goal behind the words (seeking identification vs "
+        "explanation vs enumeration vs localization)\n"
+        "- SEMANTIC SUBJECT: what kind of thing the text is fundamentally about\n"
+        "Do NOT write surface/wording features (starts-with phrases, contains-a-word, punctuation, "
+        "length): they are brittle, usually already covered, and waste the encoder's inference "
+        "ability.\n"
+        "The `related_hypotheses` are what the model ALREADY has for this leaf, each with the "
+        "fraction of the leaf's confusion it resolves — they are INSUFFICIENT, and a paraphrase of "
+        "one of them will score zero (its signal is already measured): write a hypothesis reading a "
         "genuinely DIFFERENT property than every listed one. The tree already handles everything "
         "ABOVE this leaf, so do not restate coarse distinctions; target exactly what still mixes "
         "here. Return a single statement. " + _RULES
@@ -146,7 +159,10 @@ def _attempt_feedback(i: int, hyp: str, r: dict) -> str:
     return (
         f'Attempt {i + 1}: "{hyp}" scored {r["score"]:.2f} (info gain {r["gain"]:.2f}). Its entailment '
         "scores barely separate the confused classes — the property is too weak, too rare here, or "
-        "undetectable by the NLI encoder. Try a sharper, more concrete distinguishing property."
+        "undetectable by the NLI encoder. Move UP a level of meaning, not down to wording: "
+        "anticipate the ANSWER these texts expect (its form, its kind), or reduce the texts to the "
+        "imperative they are equivalent to — and pick the angle on which the confused classes "
+        "genuinely differ."
     )
 
 

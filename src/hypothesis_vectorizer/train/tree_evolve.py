@@ -188,6 +188,7 @@ def tree_evolve(
             criterion="entropy",
             max_depth=tcfg.max_depth,
             min_samples_leaf=tcfg.min_samples_leaf,
+            min_impurity_decrease=tcfg.min_impurity_decrease,
             random_state=seed,
         ).fit(feat, y)
         leaf_id = tree.apply(feat)

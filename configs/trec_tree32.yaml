@@ -28,6 +28,6 @@ pool:
     strategy: refine
     leaf_shots: 12
     leaf_min_samples: 20
-    max_depth: 6
+    min_impurity_decrease: 0.002  # split gate replaces the depth cap (froze the frontier)
     min_samples_leaf: 10
     patience: 3

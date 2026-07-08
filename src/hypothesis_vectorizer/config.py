@@ -64,11 +64,17 @@ class TreeConfig(BaseModel):
     propose ONE hypothesis that splits it (reward = info gain), add it, refit, repeat."""
 
     rounds: int = 24  # LLM-in-loop rounds; one hypothesis added per productive round
-    refine_attempts: int = 4  # dspy.Refine / BestOfN budget per round
+    refine_attempts: int = 4  # refine-loop / best-of-n budget per round
     strategy: Literal["refine", "best_of_n"] = "refine"
     leaf_shots: int = 12  # K examples sampled (stratified) from the target leaf for the LLM
     leaf_min_samples: int = 20  # only target leaves with at least this many train examples
-    max_depth: int = 6  # asymmetric CART depth cap
+    # UNCAPPED depth by default: a depth cap froze the frontier — the exact leaf a new hypothesis
+    # was written for sat AT the cap, so the tree could never use it (measured 2026-07-07).
+    # Regularization comes from min_impurity_decrease instead: a split must remove this much
+    # WEIGHTED entropy (sklearn semantics: N_node/N x decrease), which blocks noise-shredding
+    # while letting a designed-for-the-leaf feature (~0.015 on a 456-sample leaf) through.
+    max_depth: int | None = None
+    min_impurity_decrease: float = 0.002
     min_samples_leaf: int = 10
     patience: int = 3  # stop after this many consecutive rounds that add no new hypothesis
 
