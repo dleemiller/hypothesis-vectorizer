@@ -77,10 +77,12 @@ class TreeConfig(BaseModel):
     # UNCAPPED depth by default: a depth cap froze the frontier — the exact leaf a new hypothesis
     # was written for sat AT the cap, so the tree could never use it (measured 2026-07-07).
     # Regularization comes from min_impurity_decrease instead: a split must remove this much
-    # WEIGHTED entropy (sklearn semantics: N_node/N x decrease), which blocks noise-shredding
-    # while letting a designed-for-the-leaf feature (~0.015 on a 456-sample leaf) through.
+    # WEIGHTED entropy (sklearn semantics: N_node/N x decrease). 0.002 froze a mid-size leaf too
+    # (a 0.00197 win lost to the gate by 1.5%); 0.001 measured: leaves 98->152 (min_samples_leaf
+    # bounds shredding), train_acc 0.906->0.920, and the remaining impure leaves are GENUINE
+    # confusion rather than gate-suppressed splits.
     max_depth: int | None = None
-    min_impurity_decrease: float = 0.002
+    min_impurity_decrease: float = 0.001
     min_samples_leaf: int = 10
     patience: int = 3  # stop after this many consecutive rounds that add no new hypothesis
 

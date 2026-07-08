@@ -50,8 +50,14 @@ def _best_split_gain(scores: np.ndarray, y: np.ndarray, h0: float, n_thresholds:
     return best
 
 
-def _pick_leaf(leaf_id: np.ndarray, y: np.ndarray, min_samples: int) -> int | None:
-    """The impure leaf with the most total confusion (entropy x count) and enough examples."""
+def _pick_leaf(leaf_id: np.ndarray, y: np.ndarray, min_samples: int, gate: float = 0.0) -> int | None:
+    """The impure leaf with the most total confusion (entropy x count) and enough examples.
+
+    `gate` = the tree's min_impurity_decrease: a leaf where even a PERFECT split cannot clear it
+    ((n/N) x H < gate) is unsplittable by construction — targeting it burns LM calls on a win the
+    tree would be forbidden to use (measured 2026-07-07: a 0.00197 weighted gain lost to a 0.002
+    gate and froze the frontier)."""
+    n_total = len(y)
     best, best_score = None, 0.0
     for lid in np.unique(leaf_id):
         mask = leaf_id == lid
@@ -60,6 +66,8 @@ def _pick_leaf(leaf_id: np.ndarray, y: np.ndarray, min_samples: int) -> int | No
             continue
         h = _entropy(y[mask])
         if h <= 0.0:  # pure leaf: nothing to split
+            continue
+        if (n / n_total) * h < gate:  # even a perfect split couldn't clear the tree's gate
             continue
         score = h * n
         if score > best_score:
@@ -195,7 +203,7 @@ def tree_evolve(
             random_state=seed,
         ).fit(feat, y)
         leaf_id = tree.apply(feat)
-        target = _pick_leaf(leaf_id, y, tcfg.leaf_min_samples)
+        target = _pick_leaf(leaf_id, y, tcfg.leaf_min_samples, gate=tcfg.min_impurity_decrease)
         if target is None:
             print("--- tree-evolve stop: no impure leaf with enough samples", flush=True)
             break
@@ -209,9 +217,12 @@ def tree_evolve(
         shot_idx = _sample_shots(leaf_local, y, tcfg.leaf_shots, rng)
         examples = [f"[{names[y[i]]}] {texts[i][:400]}" for i in shot_idx]
 
+        # the gain a candidate must reach for the refit tree to be ALLOWED to use it
+        required_gain = tcfg.min_impurity_decrease * len(texts) / (int(mask.sum()) * _entropy(leaf_y))
         print(
             f"--- tree-evolve round {round_i}: targeting leaf {target} "
-            f"(n={int(mask.sum())}, H={_entropy(leaf_y):.3f}, {'/'.join(classes_present)})",
+            f"(n={int(mask.sum())}, H={_entropy(leaf_y):.3f}, {'/'.join(classes_present)}) "
+            f"| gain needed to split: {required_gain:.3f}",
             flush=True,
         )
         evaluate_fn = _make_evaluator(scorer, leaf_texts, leaf_y, pool, x[mask])
