@@ -2124,3 +2124,10 @@ STORY THAT NOW HOLDS (all pre-registered, seed-checked, significance-tested):
 Backlog #16 (multi-pool ensemble) CLOSED — implemented as pool-union (simpler than head averaging,
 and sufficient). Tree-evolve line now fully characterized; next moves remain Lee's call
 (low-N / 20NG / CFPB integration).
+
+## 2026-07-08 — LAUNCH: plateau-epsilon validation (backlog #13, code+run in one session)
+PoolConfig.plateau_epsilon added (default 1e-4 = no behavior change). Validation per the cached
+analysis (2026-07-05): trec at patience 4 / rounds 10, eps 1e-4 (control) vs 0.003 (treatment),
+same seed, -m encoder, heavily cached. PRE-REGISTERED: treatment stops in FEWER rounds (analysis:
+21% of transitions are sub-noise upticks that reset patience under 1e-4) with pool_cv within noise
+(+/-0.005) of control. Commit the knob if both hold; revert the default-change idea if pool_cv drops.

@@ -1,0 +1,17 @@
+# Plateau-epsilon validation (backlog #13): patience 4, rounds 10; only epsilon differs.
+run_name: trec_eps003
+seed: 7
+data:
+  name: trec
+encoder:
+  model: dleemiller/finecat-nli-m
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash
+  extra_body:
+    provider:
+      order: [deepseek]
+      allow_fallbacks: false
+pool:
+  rounds: 10
+  patience: 4
+  plateau_epsilon: 0.003

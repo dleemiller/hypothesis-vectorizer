@@ -291,7 +291,7 @@ def evolve(
         prev_refills = refills
         prev_target = tuple(groups[0][:2]) if groups else None
 
-        if acc > best_acc + 1e-4:
+        if acc > best_acc + cfg.plateau_epsilon:
             best_acc, since_best = acc, 0
         else:
             since_best += 1

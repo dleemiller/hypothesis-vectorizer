@@ -96,6 +96,10 @@ class PoolConfig(BaseModel):
     tree: TreeConfig = TreeConfig()
     rounds: int = 6  # stability: hard cap; patience exits ~round 2-3 in practice
     patience: int = 2  # stability: stop when held-out CV accuracy stops improving
+    # stability: minimum held-out improvement that resets patience. Measured round noise is
+    # ~0.0037 median (NOTES 2026-07-05): 1e-4 lets sub-noise upticks reset patience (over-
+    # running); ~0.003 requires patience >= 3-4 or delayed real jumps get cut off.
+    plateau_epsilon: float = 1e-4
     min_keep_frac: float = 0.5  # stability: never prune below this fraction in one round
     rank_sample: int = 800  # stability: ranking needs no full-matrix precision
     # hand-written hypotheses that are ALWAYS kept: scored and fit alongside the generated
