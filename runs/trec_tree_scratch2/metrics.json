@@ -1,0 +1,14 @@
+{
+  "run_name": "trec_tree_scratch2",
+  "dataset": "trec",
+  "seed": 7,
+  "encoder": "dleemiller/finecat-nli-l",
+  "results": {
+    "pool_cv": {
+      "accuracy": 0.962,
+      "macro_f1": 0.9582,
+      "logloss": 0.1998
+    },
+    "cv_train_accuracy": 0.9092
+  }
+}

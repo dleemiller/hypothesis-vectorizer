@@ -1,0 +1,11 @@
+{
+  "lm_calls": 120,
+  "lm_input_tokens": 249993,
+  "lm_output_tokens": 608180,
+  "lm_usd": 0.1984,
+  "lm_abnormal_finishes": 4,
+  "encoder_pairs_requested": 2459969,
+  "encoder_cache_hits": 2305563,
+  "encoder_gpu_pairs": 124951,
+  "wall_seconds": 2565.0
+}

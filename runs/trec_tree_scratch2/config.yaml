@@ -1,0 +1,52 @@
+run_name: trec_tree_scratch2
+seed: 7
+data:
+  name: trec
+  train_size: 5452
+  val_size: 0
+  test_size: 2000
+  shots_per_class: null
+encoder:
+  model: dleemiller/finecat-nli-l
+  batch_size: 64
+  max_text_chars: 1200
+  device: cuda
+  verbose: true
+  features: full
+dedup:
+  kind: covariance
+  threshold: 0.95
+  ref_size: 400
+  min_std: 0.02
+  model: sentence-transformers/all-MiniLM-L6-v2
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash
+  max_tokens: 12000
+  temperature: 1.0
+  extra_body: null
+  instruction_path: null
+pool:
+  size: 8
+  method: tree
+  tree:
+    rounds: 27
+    refine_attempts: 4
+    strategy: best_of_n
+    leaf_shots: 24
+    leaf_min_samples: 20
+    max_depth: null
+    min_impurity_decrease: 0.002
+    min_samples_leaf: 10
+    patience: 3
+  rounds: 6
+  patience: 2
+  min_keep_frac: 0.5
+  rank_sample: 800
+  fixed_hypotheses: []
+  from_run: null
+  from_run_top: null
+lexical:
+  kind: none
+  dims: 128
+cache_dir: cache
+runs_dir: runs

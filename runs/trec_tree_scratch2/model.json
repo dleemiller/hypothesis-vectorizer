@@ -1,0 +1,32 @@
+{
+  "type": "nli_pool",
+  "encoder": "dleemiller/finecat-nli-l",
+  "hypotheses": [
+    "The text expects an answer that is a proper name of a person, place, or thing.",
+    "The text asks about a person.",
+    "The text asks for a description or explanation.",
+    "The text asks for a location.",
+    "The text asks for an abbreviation or acronym.",
+    "The text asks for the name of a thing, object, or event.",
+    "The text asks for a numeric value, date, or quantity.",
+    "The text can be answered with a short phrase or single word.",
+    "The text asks for the components, ingredients, or members of a category.",
+    "The text asks for the name of a company, organization, or group.",
+    "The text asks for an explanation of a process or cause.",
+    "The text asks for the definition or meaning of a word or concept.",
+    "The text asks for the name of a creative work or product.",
+    "The text asks for a specific action, instruction, or procedure.",
+    "The text asks about a specific place.",
+    "The text asks for a concrete object, product, or animal.",
+    "The text asks for a specific slogan, motto, or catchphrase.",
+    "The text asks for a role, title, or identity of a person or group.",
+    "The text asks for the significance, importance, or value of something.",
+    "The text is equivalent to asking someone to spell out an abbreviation.",
+    "The text asks for the reason or justification behind a fact or practice."
+  ],
+  "head": {
+    "kind": "hgb",
+    "learning_rate": 0.12,
+    "l2_regularization": 0.3
+  }
+}

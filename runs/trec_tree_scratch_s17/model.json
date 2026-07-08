@@ -1,0 +1,30 @@
+{
+  "type": "nli_pool",
+  "encoder": "dleemiller/finecat-nli-l",
+  "hypotheses": [
+    "The text is equivalent to asking someone to name a specific entity.",
+    "The text asks for a number or numeric value.",
+    "The text asks for a person or organization.",
+    "The text asks for the meaning of an abbreviation or acronym.",
+    "The text asks for a location.",
+    "The text asks for a definition or description of a concept.",
+    "The text can be answered with the expansion of an abbreviation.",
+    "The text can be answered with a specific object, event, or concept.",
+    "The text asks for an explanation of a cause or process.",
+    "The text asks for a specific object, product, or creative work.",
+    "The text can be answered with a person's full name.",
+    "The text asks for a type or category of entity.",
+    "The text asks for a specific term or label that names a concept or phenomenon.",
+    "The text asks about a body of water or a mountain range.",
+    "The text asks about a specific entity that is associated with a person mentioned in the text.",
+    "The text is equivalent to asking someone to name a place.",
+    "The text asks for a list or enumeration of items.",
+    "The text asks about the purpose, function, or significance of something.",
+    "The text asks for the name of a specific school, store, or business."
+  ],
+  "head": {
+    "kind": "hgb",
+    "learning_rate": 0.12,
+    "l2_regularization": 0.01
+  }
+}
