@@ -34,3 +34,29 @@ def test_cache_roundtrip_and_model_isolation(tmp_path):
 def test_normalize_is_cache_key_stable():
     assert normalize("Hello   world\n\tfoo", 1200) == normalize("Hello world foo", 1200)
     assert len(normalize("x" * 5000, 1200)) == 1200
+
+
+def test_encoder_full_features_layout():
+    """features='full' appends P(neutral) as a third block: (n, 3m), [entail | contradict | neutral],
+    derived from the SAME cached logits (no re-scoring)."""
+    import numpy as np
+
+    from hypothesis_vectorizer.config import EncoderConfig
+    from hypothesis_vectorizer.costs import CostTracker
+    from hypothesis_vectorizer.encoder import EntailmentScorer, digest, normalize
+
+    cache = ScoreCache(":memory:")
+    texts, hyp = ["alpha text", "beta text"], "the hypothesis"
+    logits = {"alpha text": np.array([2.0, 0.0, -2.0]), "beta text": np.array([-2.0, 2.0, 0.0])}
+    rows = [(digest(normalize(t, 1200)), normalize(t, 1200), z) for t, z in logits.items()]
+    cache.put_logits("m", digest(hyp), hyp, rows)
+
+    def scorer(mode):
+        return EntailmentScorer(EncoderConfig(model="m", features=mode, device="cpu"), cache, CostTracker())
+
+    two = scorer("entail_contradict").features(texts, [hyp])
+    full = scorer("full").features(texts, [hyp])
+    assert two.shape == (2, 2) and full.shape == (2, 3)
+    np.testing.assert_allclose(full[:, :2], two)  # first 2m block identical in both layouts
+    np.testing.assert_allclose(full.sum(axis=1), 1.0, atol=1e-6)  # e+c+n = softmax simplex
+    assert full[0, 0] > 0.8 and full[1, 2] > 0.4  # text0 entails; text1's neutral is the mid logit

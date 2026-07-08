@@ -115,8 +115,10 @@ def _make_evaluator(
     m = len(pool)
 
     def evaluate(hyp: str) -> dict:
-        feats = scorer.features(leaf_texts, [hyp])  # (k, 2) = [entail | contradict]
-        gains = [_best_split_gain(feats[:, i], leaf_y, h0) for i in (0, 1)] if h0 > 0 else [0.0, 0.0]
+        feats = scorer.features(leaf_texts, [hyp])  # (k, 2|3) = [entail | contradict (| neutral)]
+        gains = (
+            [_best_split_gain(feats[:, i], leaf_y, h0) for i in range(feats.shape[1])] if h0 > 0 else [0.0]
+        )
         best = int(np.argmax(gains))
         gain_norm = gains[best] / h0 if h0 > 0 else 0.0
         max_corr, j = _max_abs_corr(feats[:, best], pool_leaf_feats)
@@ -150,9 +152,10 @@ def _related_hypotheses(x_leaf: np.ndarray, leaf_y: np.ndarray, pool: list[str],
     if h0 <= 0:
         return []
     m = len(pool)
+    k = x_leaf.shape[1] // m  # 2 or 3 feature columns per hypothesis
     scored = []
     for j in range(m):
-        g = max(_best_split_gain(x_leaf[:, j], leaf_y, h0), _best_split_gain(x_leaf[:, m + j], leaf_y, h0))
+        g = max(_best_split_gain(x_leaf[:, b * m + j], leaf_y, h0) for b in range(k))
         scored.append((g / h0, pool[j]))
     scored.sort(reverse=True)
     return [f"resolves {g:.0%} of this leaf's confusion: {s}" for g, s in scored[:top]]

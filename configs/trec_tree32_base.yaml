@@ -12,6 +12,7 @@ data:
 encoder:
   model: dleemiller/finecat-nli-l
   batch_size: 64  # polite batch: sharing the GPU with Lee's ASR training
+  features: full  # [entail|contradict|neutral]: neutral is a distinct split axis for tree/RF heads
 
 lm:
   model: openrouter/deepseek/deepseek-v4-flash

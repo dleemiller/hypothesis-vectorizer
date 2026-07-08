@@ -58,12 +58,17 @@ class EntailmentScorer:
         return _softmax(self._logits(texts, pool))
 
     def features(self, texts: list[str], pool: list[str]) -> np.ndarray:
-        """The method's feature representation: (n, 2m) = [P(entail) | P(contradict)].
+        """The method's feature representation: (n, 2m) = [P(entail) | P(contradict)], or with
+        cfg.features='full' (n, 3m) = [P(entail) | P(contradict) | P(neutral)].
 
-        Column j is hypothesis j's entailment; column m+j its contradiction.
-        """
+        Column j is hypothesis j's entailment; column m+j its contradiction; (full) 2m+j its
+        neutral. Neutral appends at the END so first-2m slicing stays valid in both layouts;
+        it matters to tree heads only (axis-aligned splits can't derive it from e and c)."""
         p = self.probs(texts, pool)
-        return np.concatenate([p[:, :, 0], p[:, :, 2]], axis=1)
+        blocks = [p[:, :, 0], p[:, :, 2]]
+        if self.cfg.features == "full":
+            blocks.append(p[:, :, 1])
+        return np.concatenate(blocks, axis=1)
 
     def _logits(self, texts: list[str], pool: list[str]) -> np.ndarray:
         norm_t = [normalize(t, self.cfg.max_text_chars) for t in texts]

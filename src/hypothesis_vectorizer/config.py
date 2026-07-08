@@ -25,6 +25,12 @@ class EncoderConfig(BaseModel):
     max_text_chars: int = 1200  # normalize+truncate BEFORE hashing so cache keys are stable
     device: str = "cuda"
     verbose: bool = True  # progress lines on long GPU scoring passes (CLI on; vectorizer off)
+    # feature layout per hypothesis: [entail | contradict] (2 cols) or 'full' = [entail |
+    # contradict | neutral] (3 cols). Neutral is linearly dependent (e+n+c=1) so it adds nothing
+    # to a LINEAR head — but trees split ONE feature at a time, and a threshold on neutral is not
+    # expressible as any single threshold on e or c: a real extra axis for DT/RF heads. Raw logits
+    # are cached, so the third column is free.
+    features: Literal["entail_contradict", "full"] = "entail_contradict"
 
 
 class DedupConfig(BaseModel):

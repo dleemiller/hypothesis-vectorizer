@@ -119,6 +119,11 @@ class SplitLeaf(dspy.Signature):
         "- IMPLIED INTENT: the unstated goal behind the words (seeking identification vs "
         "explanation vs enumeration vs localization)\n"
         "- SEMANTIC SUBJECT: what kind of thing the text is fundamentally about\n"
+        "- ATTRIBUTE-SPECIFIC (exploits the NEUTRAL class): PRESUPPOSE a specific attribute "
+        '("The number sought by the text is a date." / "The person the text asks about is a '
+        'political leader."). Texts LACKING the attribute score NEUTRAL — neither entailed nor '
+        "contradicted — so neutrality itself separates has-it from lacks-it, while entailment "
+        "vs contradiction splits within the group that has it: one hypothesis, two distinctions.\n"
         "Do NOT write surface/wording features (starts-with phrases, contains-a-word, punctuation, "
         "length): they are brittle, usually already covered, and waste the encoder's inference "
         "ability.\n"

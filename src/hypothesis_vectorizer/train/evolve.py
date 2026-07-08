@@ -72,11 +72,13 @@ def rank_hypotheses(
         preds = clf.predict(xx[ihe])
         errors += [(int(i), int(p)) for i, p in zip(ihe, preds) if p != y[i]]
 
-    # rank/prune only the NLI columns (first 2m: [entail | contradict]); baseline columns are fixed
+    # rank/prune only the NLI columns (first k*m; k=2 [entail|contradict] or 3 [..|neutral]);
+    # baseline columns are fixed
+    k = x.shape[1] // m
     col_stability = (imps > 0).mean(axis=0)
     mean_imp = imps.mean(axis=0)
-    hyp_importance = mean_imp[:m] + mean_imp[m : 2 * m]
-    hyp_stability = np.maximum(col_stability[:m], col_stability[m : 2 * m])
+    hyp_importance = sum(mean_imp[b * m : (b + 1) * m] for b in range(k))
+    hyp_stability = np.maximum.reduce([col_stability[b * m : (b + 1) * m] for b in range(k)])
     order = np.lexsort((-hyp_stability, -hyp_importance))
     r = Ranking(order=order, importance=hyp_importance, stability=hyp_stability, errors=errors)
     r._n = len(y)

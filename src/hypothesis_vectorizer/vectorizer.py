@@ -35,7 +35,7 @@ from .config import EncoderConfig
 from .costs import CostTracker
 from .encoder import EntailmentScorer
 
-_SCORE_MODES = ("entail_contradict", "entail", "contrast")
+_SCORE_MODES = ("entail_contradict", "entail", "contrast", "full")
 _DEFAULT_ENCODER = "dleemiller/finecat-nli-l"
 
 
@@ -54,9 +54,11 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
         marginal value over them. Prepended to ``hypotheses_``.
     encoder : str
         HuggingFace cross-encoder id (entailment=0, neutral=1, contradiction=2).
-    score_mode : {"entail_contradict", "entail", "contrast"}
+    score_mode : {"entail_contradict", "entail", "contrast", "full"}
         Columns per hypothesis: both P(entail) and P(contradict) (2 cols), just
-        P(entail) (1 col), or their difference P(entail)-P(contradict) (1 col).
+        P(entail) (1 col), their difference P(entail)-P(contradict) (1 col), or all three
+        probabilities incl. P(neutral) (3 cols — a distinct splitting axis for tree heads:
+        axis-aligned splits cannot derive a neutral threshold from e and c).
     device, batch_size, max_text_chars : encoder inference knobs.
     cache_path : str | Path | None
         sqlite score cache. A path persists scores across processes; ``None`` uses
@@ -174,20 +176,22 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         check_is_fitted(self, "hypotheses_")
         texts = self._coerce_texts(X)
-        feats = self._get_scorer().features(texts, self.hypotheses_)  # (n, 2m) [entail | contradict]
+        feats = self._get_scorer().features(texts, self.hypotheses_)  # (n, 2m|3m) [e | c (| n)]
         m = len(self.hypotheses_)
-        if self.score_mode == "entail_contradict":
+        if self.score_mode in ("entail_contradict", "full"):  # scorer already emits the layout
             return feats
         if self.score_mode == "entail":
             return feats[:, :m]
-        return feats[:, :m] - feats[:, m:]  # contrast
+        return feats[:, :m] - feats[:, m : 2 * m]  # contrast
 
     def get_feature_names_out(self, input_features=None):
         check_is_fitted(self, "hypotheses_")
-        if self.score_mode == "entail_contradict":
+        if self.score_mode in ("entail_contradict", "full"):
             names = [f"entail: {h}" for h in self.hypotheses_] + [
                 f"contradict: {h}" for h in self.hypotheses_
             ]
+            if self.score_mode == "full":
+                names += [f"neutral: {h}" for h in self.hypotheses_]
         elif self.score_mode == "entail":
             names = [f"entail: {h}" for h in self.hypotheses_]
         else:
@@ -220,6 +224,7 @@ class HypothesisVectorizer(BaseEstimator, TransformerMixin):
                 batch_size=self.batch_size,
                 max_text_chars=self.max_text_chars,
                 verbose=self.verbose,
+                features="full" if self.score_mode == "full" else "entail_contradict",
             )
             cache = ScoreCache(self.cache_path if self.cache_path is not None else ":memory:")
             self._scorer = EntailmentScorer(cfg, cache, CostTracker())
