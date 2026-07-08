@@ -29,6 +29,6 @@ pool:
     strategy: best_of_n
     leaf_shots: 24
     leaf_min_samples: 20
-    min_impurity_decrease: 0.0005  # = "split must remove ~2.7 total bits"; 0.001 demanded 0.218 gain of a n=26 leaf (too steep)
+    min_impurity_decrease: 0.002  # conservative: big honest targets; acceptance bar (= this gate) keeps the frontier moving
     min_samples_leaf: 10
     patience: 3

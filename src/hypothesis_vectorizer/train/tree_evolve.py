@@ -251,12 +251,23 @@ def tree_evolve(
 
         added = None
         if hyp:
-            kept, rejects = deduper.filter([hyp], against=pool, seen=seen)
-            if kept:
-                added = kept[0]
-                pool.append(added)
-            else:  # survived the reward's leaf-novelty but is redundant on the FULL train:
-                rejected_redundant.append(hyp)  # tell the LLM explicitly in later rounds
+            # ACCEPTANCE BAR = SPLIT GATE: only add a hypothesis the refit tree would actually be
+            # ALLOWED to split on. Accepting below-gate winners froze the frontier (the pool grew
+            # but the target leaf never changed) — a weak winner is an honest no-add round instead.
+            winner = next((a for a in evaluate_fn.attempts if a["hypothesis"] == hyp), None)
+            if winner is not None and winner["gain"] < required_frac:
+                print(
+                    f"    winner gain {winner['gain']:.3f} < split gate {required_frac:.3f} "
+                    "-> no-add (tree couldn't use it)",
+                    flush=True,
+                )
+            else:
+                kept, rejects = deduper.filter([hyp], against=pool, seen=seen)
+                if kept:
+                    added = kept[0]
+                    pool.append(added)
+                else:  # survived the reward's leaf-novelty but is redundant on the FULL train:
+                    rejected_redundant.append(hyp)  # tell the LLM explicitly in later rounds
 
         history.append(
             {
