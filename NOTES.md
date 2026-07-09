@@ -2180,3 +2180,22 @@ tests/test_dataset_labels.py asserts spec['classes'] == ds.features[label].names
 stay 1:1. Marked `network` (new pytest marker) so the default suite stays offline/fast (48 pass, 4
 deselected, 23s); guard runs green with `-m network` (3 pass, 5s). Closes the highest-value gap from
 the cohort review — the silent-mislabel trap is now guarded, not trusted. No GPU touched.
+
+## 2026-07-09 — component-summarization prototype (Lee greenlit): PCA/PLS/varimax-FA -> LLM-named contrastive hyps
+Idea: prune-by-summarization. Decompose the cached score matrix of an abundant pool into its dominant
+axes, LLM-name each +pole/-pole contrast as ONE hypothesis. experiments/scripts/component_summarize.py
+(CPU decompose + network naming; --verify re-scores on GPU). Ran naming on trec_full (62 hyps, all
+cached, ZERO GPU) for all 3 methods, k=6.
+FINDING: the top components ARE TREC's class structure as clean contrastive axes; PC1 = "asks for a
+name/identity RATHER THAN a description/definition" == the exact DESC/ENTY stuck-leaf axis we probed
+2026-07-08. 32 components -> 90% variance == the long-measured "~30 useful directions". All 3 methods
+produced coherent, nameable contrastive summaries:
+  - PLS (supervised): poles label-aligned, sharpest for the task.
+  - FA+varimax: most balanced variance (26/26/15/13/11/8%), sparse loadings = most nameable poles.
+  - PCA: variance-ordered, poles slightly blendier at the tail.
+Every named hyp came out in the CONTRASTIVE "X rather than Y" framing we measured as strongest (36 vs
+13% on the stuck leaf). This is the interpretable prune-from-abundance route working end-to-end
+through naming.
+OPEN (needs GPU, --verify): re-score the ~6 named hyps and correlate each with its component score —
+does the LLM actually invert the encoder? Then the real test: do k contrastive summaries (k~=effective
+rank) match the 62-hyp pool's pool_cv at a fraction of the hypotheses. Queued for GPU-free.
