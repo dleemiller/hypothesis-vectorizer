@@ -84,6 +84,40 @@ def _name_components(components, task):
     return named
 
 
+def _rehypothesize(components, named, task):
+    """Second pass: show the LLM the poles + its own first draft, ask for a SHARPER single
+    hypothesis and (if the contrast is really two properties) an atomic split. Inspection only."""
+    import dspy
+
+    sig = dspy.Signature(
+        "task, pole_high: list[str], pole_low: list[str], draft: str -> "
+        "refined: str, atomic_split: list[str]",
+        "`draft` is a first attempt at ONE hypothesis separating the pole_high texts from the "
+        "pole_low texts for a classifier. Improve it: `refined` = the single sharpest declarative "
+        "sentence about 'the text' capturing that contrast (fix vagueness, keep it verifiable from "
+        "the text alone, prefer the answer-anticipation the encoder can infer). `atomic_split` = if "
+        "the contrast is really TWO independent properties, the 1-2 standalone affirmative "
+        "hypotheses it splits into; else an empty list.",
+    )
+    lm = dspy.LM(model="openrouter/deepseek/deepseek-v4-flash", max_tokens=8000, temperature=0.7)
+    predict = dspy.Predict(sig)
+    out = []
+    with dspy.context(lm=lm):
+        for c, d in zip(components, named):
+            if not d:
+                out.append((d, []))
+                continue
+            try:
+                r = predict(task=task, pole_high=c["pos"], pole_low=c["neg"], draft=d)
+                out.append(
+                    ((r.refined or "").strip(), [s.strip() for s in (r.atomic_split or []) if s.strip()])
+                )
+            except Exception as e:
+                print(f"  refine comp {c['idx']} failed: {type(e).__name__}", flush=True)
+                out.append((d, []))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="trec_full", help="run dir whose pool+scores to decompose")
@@ -91,6 +125,8 @@ def main():
     ap.add_argument("--k", type=int, default=8, help="number of components to summarize")
     ap.add_argument("--method", choices=["pls", "pca", "fa"], default="pls")
     ap.add_argument("--encoder", default="dleemiller/finecat-nli-l")
+    ap.add_argument("--refine", action="store_true", help="second LLM pass: sharpen + atomic split")
+    ap.add_argument("--poles", type=int, default=1, help="how many +/- pole hyps to print per component")
     ap.add_argument("--verify", action="store_true", help="re-score named hyps on GPU + correlate")
     ap.add_argument("--cache", default="cache/nli_scores.sqlite")
     args = ap.parse_args()
@@ -128,11 +164,20 @@ def main():
 
     print(f"=== {args.method.upper()} on {args.run}: {m} hyps -> naming {args.k} components ===\n")
     named = _name_components(components, bundle.task)
-    for c, h in zip(components, named):
+    refined = _rehypothesize(components, named, bundle.task) if args.refine else None
+    for i, (c, h) in enumerate(zip(components, named)):
         print(f"[comp {c['idx'] + 1}  var {c['var']:.1%}]")
-        print(f"  +pole: {c['pos'][0][:76]}")
-        print(f"  -pole: {c['neg'][0][:76]}")
-        print(f"  NAMED: {h}\n")
+        for p in c["pos"][: args.poles]:
+            print(f"  +pole: {p[:78]}")
+        for p in c["neg"][: args.poles]:
+            print(f"  -pole: {p[:78]}")
+        print(f"  NAMED:   {h}")
+        if refined is not None:
+            ref, split = refined[i]
+            print(f"  REFINED: {ref}")
+            if split:
+                print(f"  SPLIT:   {' | '.join(split)}")
+        print()
 
     if args.verify:
         newX = scorer.features(bundle.train_texts, [h for h in named if h])[:, : sum(bool(h) for h in named)]
