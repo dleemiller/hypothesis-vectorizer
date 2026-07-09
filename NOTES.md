@@ -2172,3 +2172,11 @@ test asserting ClassLabel order == hardcoded, since that's the whole risk; (2) c
 NET: high-quality, honest, correctly-orderd. The low-N prior-head result (0.594 zero-label vs
 0.428 zero-shot-NLI) is the strongest new finding and aligns with the tree-evolve "natural home =
 low-N" note. Recommend keep. Flagged gaps to Bradley/Lee.
+
+## 2026-07-08 — closed review gap #1: ClassLabel-order guard for the cohort's new datasets (CPU-only)
+Idle cycle; GPU still held by Lee's training. Turned my one-time manual verification (that
+banking77/clinc150/goemotions hardcoded class orders match HF) into a permanent test:
+tests/test_dataset_labels.py asserts spec['classes'] == ds.features[label].names exactly + descriptions
+stay 1:1. Marked `network` (new pytest marker) so the default suite stays offline/fast (48 pass, 4
+deselected, 23s); guard runs green with `-m network` (3 pass, 5s). Closes the highest-value gap from
+the cohort review — the silent-mislabel trap is now guarded, not trusted. No GPU touched.
