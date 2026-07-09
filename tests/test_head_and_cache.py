@@ -60,3 +60,20 @@ def test_encoder_full_features_layout():
     np.testing.assert_allclose(full[:, :2], two)  # first 2m block identical in both layouts
     np.testing.assert_allclose(full.sum(axis=1), 1.0, atol=1e-6)  # e+c+n = softmax simplex
     assert full[0, 0] > 0.8 and full[1, 2] > 0.4  # text0 entails; text1's neutral is the mid logit
+
+
+def test_wal_probe_is_per_process_and_cache_works(tmp_path):
+    """Two caches in the SAME dir (the concurrent-run case) both init cleanly; the WAL probe is
+    per-pid so neither unlinks the other's probe mid-write. On a normal FS both get WAL."""
+    import numpy as np
+
+    from hypothesis_vectorizer.cache import ScoreCache
+    from hypothesis_vectorizer.encoder import digest
+
+    c1 = ScoreCache(tmp_path / "nli.sqlite")
+    c2 = ScoreCache(tmp_path / "nli.sqlite")  # second opener, same dir + file
+    assert c1.journal_mode in ("WAL", "DELETE") and c2.journal_mode == c1.journal_mode
+    c1.put_logits("m", digest("h"), "h", [(digest("t"), "t", np.array([1.0, 0.0, -1.0]))])
+    assert digest("t") in c2.get_logits("m", digest("h"), [digest("t")])  # round-trips across handles
+    # no probe files leaked
+    assert not list(tmp_path.glob(".wal_probe*"))

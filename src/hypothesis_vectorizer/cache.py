@@ -7,6 +7,7 @@ sqlite objects are thread-affine, and this cache has been shared with worker
 threads before — cheap insurance against a known crash class.
 """
 
+import os
 import sqlite3
 import threading
 from pathlib import Path
@@ -35,8 +36,11 @@ def _wal_supported(directory: Path) -> bool:
     'disk I/O error' on the first real write — and that error poisons both the connection and
     the half-written main file. So we never attempt WAL on the real cache: we probe a temp file
     (with an actual write), then open the real DB directly in the supported mode.
+
+    The probe filename is PER-PROCESS (pid): concurrent runs sharing a cache dir must not unlink
+    each other's probe mid-write, which would spuriously fail the survivor into DELETE mode.
     """
-    probe = directory / ".wal_probe.sqlite"
+    probe = directory / f".wal_probe.{os.getpid()}.sqlite"
     for suffix in ("", "-wal", "-shm"):
         Path(str(probe) + suffix).unlink(missing_ok=True)
     conn = None
