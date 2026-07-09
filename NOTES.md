@@ -2215,3 +2215,18 @@ FINDINGS (against the pre-registered reads):
    floor on the usable signal, not the whole of it.
 Figures: head_channel_{separation,dist}_<ds>.{png,pdf}. Pure local, one GPU, no LLM spend. Ran under
 a niced retry launcher on the contended box (one transient import-OOM before the box freed up).
+
+## 2026-07-09 — QUEUE: score_mode ablation on sst2 + ag_news (test the neutral-axis prediction)
+Follow-up to the per-head channel probe. The 3 NLI heads are a softmax (e+n+c=1, verified), so
+entail_contradict [e|c] is the full rank-2 simplex representation (neutral = 1−e−c is implicit),
+while `contrast` (e−c) and `entail` (e) are rank-deficient — they DISCARD the e+c = 1−neutral
+"certainty" axis. The channel probe showed that axis is discriminative on ag_news (neutral sep 0.69
+@ -l) and sst2 (0.53) but weak on trec (0.25). PREDICTION: the entail_contradict − contrast accuracy
+gap is LARGER on sst2/ag_news than on trec. Existing abl_trec_scoremode (weak-neutral) shows them
+nearly tied: entail 0.886 / contrast 0.888 / entail_contradict 0.892 (+0.004 only). If sst2/ag_news
+show a clearly bigger gap, Lee's leaf-level 3-class push converts to an ACCURACY result, not just
+separation. Null result (gap also ~0) = neutral separates but the RF already extracts it from [e|c]
+either way, so keep entail_contradict as the safe default and drop the "add explicit neutral" idea.
+Protocol = identical to abl_trec_scoremode: -l encoder, axis score_mode, train 100/class, 5 seeds,
+test 2000/seed 7. run-ids abl_sst2_scoremode, abl_ag_news_scoremode. Cache reused from the probe
+(test pairs already scored). Pure local, no LLM spend.
