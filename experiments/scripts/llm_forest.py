@@ -117,6 +117,29 @@ def evaluate(raw, forest, flat_pool, fz, budgets, seeds, anchors=None) -> dict:
                                             "acc_std": float(np.std(accs)), "seeds": len(seeds)}
             print(f"    [{raw.name:10} {name:16} k={str(k):>4}] "
                   f"acc={np.mean(accs):.3f}±{np.std(accs):.3f}")
+    # paired McNemar on the fixed test set at the top budget, single seed (deterministic)
+    sig_budget = "all" if "all" in budgets else max(b for b in budgets if b != "all")
+    out["significance"] = paired_significance(raw, labelfree, learned, sig_budget, seeds[0])
+    for pair, r in out["significance"].items():
+        print(f"    [{raw.name:10} McNemar {pair:20}] p={r['p_value']:.3f} "
+              f"(discordant {r['discordant']}: A {r['b_only_A']} / B {r['c_only_B']}) @k={sig_budget}")
+    return out
+
+
+def paired_significance(raw, labelfree, learned, budget, seed) -> dict:
+    """Exact McNemar on the fixed test set for the decisive pairs, at one (budget, seed) so both
+    heads are deterministic. Reuses the library's `mcnemar` (train/compare.py)."""
+    from hypothesis_vectorizer.train.compare import mcnemar
+
+    idx = datasets.subsample_indices(raw.y_train, budget, seed)
+    tr_texts, tr_y = [raw.train_texts[i] for i in idx], raw.y_train[idx]
+    pred = {name: sysm.run(tr_texts, tr_y, list(raw.test_texts)).argmax(1)
+            for name, sysm in learned.items()}
+    pred["induction_soft"] = labelfree["forest_induction_soft"].run(
+        [], np.array([]), list(raw.test_texts)).argmax(1)
+    out: dict = {"embed_vs_induction": mcnemar(raw.y_test, pred["forest_embed"], pred["induction_soft"])}
+    if "flat_pool_embed" in pred:  # the promotion test
+        out["forest_vs_flat"] = mcnemar(raw.y_test, pred["forest_embed"], pred["flat_pool_embed"])
     return out
 
 
@@ -226,6 +249,9 @@ def _print_verdict_table(results: dict, budgets) -> None:
         for name, curve in r["learned"].items():
             cells = "  ".join(f"k={k}:{curve[str(k)]['acc_mean']:.3f}" for k in budgets if str(k) in curve)
             print(f"  {name:16} {cells}")
+        for pair, s in r.get("significance", {}).items():
+            print(f"  McNemar {pair:20} p={s['p_value']:.3f}  "
+                  f"discordant {s['discordant']} (forest {s['b_only_A']} / other {s['c_only_B']})")
 
 
 if __name__ == "__main__":
