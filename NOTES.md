@@ -2199,3 +2199,14 @@ through naming.
 OPEN (needs GPU, --verify): re-score the ~6 named hyps and correlate each with its component score —
 does the LLM actually invert the encoder? Then the real test: do k contrastive summaries (k~=effective
 rank) match the 62-hyp pool's pool_cv at a fraction of the hypotheses. Queued for GPU-free.
+
+## 2026-07-09 — persisted canonical PLS summary pool + payoff-test config (CPU/network only)
+Fixed a reproducibility gap: naming runs at temp 0.7, so each component_summarize run gives slightly
+different hypotheses. Added --save to persist ONE canonical pool. runs/trec_summary_pls/model.json =
+7 hyps (top-6 PLS axes of trec_full, refined; comp6 split into abbreviation | proper-name atomics).
+configs/trec_summary_pls_eval.yaml runs the PAYOFF TEST via from_run (rounds 0): score the 7 on -l,
+CV head, one test eval. PRE-REGISTERED: baseline is trec_full 0.964 @ 62 hyps and static-32 0.960;
+success = the 7-hyp summary lands within ~0.02 of 0.960 (it's 7 vs 62 — expect SOME drop but the
+question is how much accuracy survives 9x compression to human-named axes); strong = >=0.94 at 7 hyps
+(near-full accuracy from a 7-sentence interpretable model). GPU-gated (needs to score 7 new hyps x
+5452+2000 texts, ~cheap); queued for GPU-free. No GPU touched this cycle.

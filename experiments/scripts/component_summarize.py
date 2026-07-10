@@ -17,6 +17,7 @@ re-scores the named hypotheses [GPU]. Run without --verify under a GPU hold to p
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 
@@ -126,6 +127,7 @@ def main():
     ap.add_argument("--method", choices=["pls", "pca", "fa"], default="pls")
     ap.add_argument("--encoder", default="dleemiller/finecat-nli-l")
     ap.add_argument("--refine", action="store_true", help="second LLM pass: sharpen + atomic split")
+    ap.add_argument("--save", default=None, help="persist the summary pool as runs/<name>/model.json")
     ap.add_argument("--poles", type=int, default=1, help="how many +/- pole hyps to print per component")
     ap.add_argument("--verify", action="store_true", help="re-score named hyps on GPU + correlate")
     ap.add_argument("--cache", default="cache/nli_scores.sqlite")
@@ -178,6 +180,42 @@ def main():
             if split:
                 print(f"  SPLIT:   {' | '.join(split)}")
         print()
+
+    if args.save:
+        from hypothesis_vectorizer.dedup import norm_statement
+
+        # deployable pool: refined form if present else named; expand atomic splits; text-dedup
+        final, seen = [], set()
+        for i, h in enumerate(named):
+            candidates = []
+            if refined is not None and refined[i][1]:  # split -> use the atomic hyps
+                candidates = refined[i][1]
+            elif refined is not None and refined[i][0]:
+                candidates = [refined[i][0]]
+            elif h:
+                candidates = [h]
+            for s in candidates:
+                k = norm_statement(s)
+                if k and k not in seen:
+                    seen.add(k)
+                    final.append(s)
+        out_dir = Path("runs") / args.save
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "model.json").write_text(
+            json.dumps(
+                {
+                    "type": "nli_pool",
+                    "encoder": args.encoder,
+                    "hypotheses": final,
+                    "head": None,
+                    "provenance": f"component-summarize {args.method} k={args.k} of {args.run} "
+                    f"(refine={args.refine})",
+                },
+                indent=2,
+            )
+        )
+        (out_dir / "config.yaml").write_text(f"run_name: {args.save}  # synthetic: summary pool only\n")
+        print(f"\nsaved {len(final)} summary hypotheses -> {out_dir}/model.json")
 
     if args.verify:
         newX = scorer.features(bundle.train_texts, [h for h in named if h])[:, : sum(bool(h) for h in named)]

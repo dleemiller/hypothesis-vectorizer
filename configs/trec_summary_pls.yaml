@@ -1,0 +1,16 @@
+# PAYOFF TEST for component-summarization: does the 7-hypothesis PLS summary pool (distilled from
+# trec_full's 62 by naming its top-6 PLS axes) match the 62-pool's pool_cv? from_run loads the saved
+# summary pool; rounds 0 = no generation, just score (GPU) + CV head + one test eval.
+run_name: trec_summary_pls_eval
+seed: 7
+data:
+  name: trec
+  train_size: 5452
+  val_size: 0
+  test_size: 2000
+encoder:
+  model: dleemiller/finecat-nli-l
+  features: full
+pool:
+  from_run: trec_summary_pls
+  rounds: 0
