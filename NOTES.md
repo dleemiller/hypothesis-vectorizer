@@ -2305,3 +2305,13 @@ BEST ECE (0.127), BEST entail separation (0.484), and 4× fewer hypotheses — e
 + calibration. Closes the loop: the matched-entail↑ / contradict→neutral profile shift measured
 earlier is the mechanism, and it cashes out as lower logloss/ECE, not higher accuracy (TREC@-l
 ceiling). Pure local, cache reused, no LLM spend.
+
+## 2026-07-09 — QUEUE: pool-size × encoder-size sweep (do hypotheses substitute for capacity?)
+Only genuinely-open thread after the run survey: nobody crossed pool-size with encoder-size. Running
+the abl pool_size axis at -xs/-s/-m (identical protocol to the existing abl_trec_poolsize @ -l: pool
+trec_gen256, sizes [8,16,32,64,128,192,256], train 20/class, 5 seeds, test 2000/seed 7) and reusing
+-l. QUESTION: does a big pool on a small encoder catch a small pool on a big encoder? -l reference:
+n=8 acc 0.622 → n=192 acc 0.884. PREDICTED: partial substitution — a big pool lifts the small
+encoders a lot but plateaus below -l (per the channel probe, small-encoder single-head SEPARATION
+caps low, so extra hypotheses add coverage but each is a weaker feature). Calibration (logloss) vs
+pool size falls out for free (abl logs it). Figure poolsize_x_encoder_trec. Pure local, no LLM spend.
