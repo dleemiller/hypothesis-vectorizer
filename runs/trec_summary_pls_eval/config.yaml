@@ -1,0 +1,53 @@
+run_name: trec_summary_pls_eval
+seed: 7
+data:
+  name: trec
+  train_size: 5452
+  val_size: 0
+  test_size: 2000
+  shots_per_class: null
+encoder:
+  model: dleemiller/finecat-nli-l
+  batch_size: 128
+  max_text_chars: 1200
+  device: cuda
+  verbose: true
+  features: full
+dedup:
+  kind: covariance
+  threshold: 0.95
+  ref_size: 400
+  min_std: 0.02
+  model: sentence-transformers/all-MiniLM-L6-v2
+lm:
+  model: openrouter/deepseek/deepseek-v4-flash
+  max_tokens: 12000
+  temperature: 1.0
+  extra_body: null
+  instruction_path: null
+pool:
+  size: 64
+  method: stability
+  tree:
+    rounds: 24
+    refine_attempts: 4
+    strategy: refine
+    leaf_shots: 12
+    leaf_min_samples: 20
+    max_depth: null
+    min_impurity_decrease: 0.002
+    min_samples_leaf: 10
+    patience: 3
+  rounds: 0
+  patience: 2
+  plateau_epsilon: 0.0001
+  min_keep_frac: 0.5
+  rank_sample: 800
+  fixed_hypotheses: []
+  from_run: trec_summary_pls
+  from_run_top: null
+lexical:
+  kind: none
+  dims: 128
+cache_dir: cache
+runs_dir: runs

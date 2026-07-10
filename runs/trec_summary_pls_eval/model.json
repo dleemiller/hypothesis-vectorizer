@@ -1,0 +1,18 @@
+{
+  "type": "nli_pool",
+  "encoder": "dleemiller/finecat-nli-l",
+  "hypotheses": [
+    "The text asks for the proper name or identity of a specific entity, not for a definition or description.",
+    "The text asks for a specific factual answer (such as a number, location, or code) rather than the meaning or expansion of a term or abbreviation.",
+    "The text asks for a location.",
+    "The text seeks a name or type identification, not a reason or explanation.",
+    "The text asks for a specific abbreviation, its expansion, or a category, rather than a detailed explanation.",
+    "The text asks for an abbreviation.",
+    "The text asks for a proper name or title."
+  ],
+  "head": {
+    "kind": "hgb",
+    "learning_rate": 0.06,
+    "l2_regularization": 0.3
+  }
+}

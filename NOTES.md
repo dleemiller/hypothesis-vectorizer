@@ -2312,3 +2312,26 @@ legitimate interpretability/compression tool (compact human-named contrastive ax
 NOT an accuracy play — at any hypothesis budget, direct generation / abundance+dedup does as well or
 better. Consistent with the abundance-prune finding (keep-all + cheap dedup > prune-hard). Line
 answered: use it when you WANT a small interpretable axis-set, not to beat the pool.
+
+## 2026-07-09 — COMPONENT-SUMMARIZATION: FINAL REVIEW (line closed)
+PLS component-summary payoff sweep (trec_full source, features=full, cv head, GPU-scored):
+  k / deployed-hyps        acc     macro_f1  logloss
+  k=7   /  7               0.910   0.905     0.300
+  k=16  / 16 (no refine)   0.940   0.9453    0.331    <- best macro-F1 of the whole line
+  k=16  / 30 (refine+split)0.952   0.9345    0.2925
+  refs: curated-32 0.960 | trec_full-62 0.964 | abundance-128 0.962
+ACCURACY-vs-COUNT curve: 7->.910, 16->.940, 30->.952, 32->.960, 62->.964 — monotone, asymptotes
+~0.96. Component-summarization sits ON or SLIGHTLY BELOW the direct-generation curve at matched
+count, with WORSE calibration (logloss rises as hyps shrink: 0.29-0.33 vs pool's 0.18-0.23).
+FINDINGS:
+1. It's a smooth interpretability/compression knob, NOT an accuracy win — direct generation /
+   abundance+dedup match or beat it at any budget.
+2. `refine` (2nd LLM pass) only helps accuracy by SPLITTING axes into more hyps (16->30 = +1.2pt) —
+   not magic, just more features; and it HURTS macro-F1 (.9453->.9345) by fragmenting balanced axes.
+   For a clean interpretable set, run WITHOUT refine.
+3. BRIGHT SPOT: strict-16 has the best macro-F1 in the line (0.9453, > trec_full) — 16 balanced
+   contrastive axes cover classes evenly (good rare-class recall) even as overall acc (0.940) trails.
+   If the objective is macro-F1 / interpretability, a small contrastive axis-set is competitive.
+RECOMMENDATION: use component-summarization when you WANT a compact human-readable axis-set
+(strict-16, no refine, ~0.94 acc / 0.945 f1); use the pool (abundance+dedup) when you want max
+accuracy (~0.96). Line answered end-to-end; stopping here per Lee.

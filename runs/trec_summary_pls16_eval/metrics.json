@@ -1,0 +1,14 @@
+{
+  "run_name": "trec_summary_pls16_eval",
+  "dataset": "trec",
+  "seed": 7,
+  "encoder": "dleemiller/finecat-nli-l",
+  "results": {
+    "pool_cv": {
+      "accuracy": 0.952,
+      "macro_f1": 0.9345,
+      "logloss": 0.2925
+    },
+    "cv_train_accuracy": 0.9151
+  }
+}

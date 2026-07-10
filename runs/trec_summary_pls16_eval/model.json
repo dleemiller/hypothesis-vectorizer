@@ -1,0 +1,41 @@
+{
+  "type": "nli_pool",
+  "encoder": "dleemiller/finecat-nli-l",
+  "hypotheses": [
+    "The text asks for the name or identity of a person or organization rather than a description or definition of a concept.",
+    "The text asks for a specific factual value, location, or entity.",
+    "The text does not ask for the expansion or meaning of an abbreviation.",
+    "The text asks for a location as the answer.",
+    "The text asks for the name of a specific thing or category.",
+    "The text does not ask for an explanation of a cause, reason, or process.",
+    "The text seeks a short, factual label.",
+    "The text does not seek a multi-step explanation or causal reasoning.",
+    "The text asks for an abbreviation.",
+    "The text asks for a proper name or title.",
+    "The text asks for a specific person.",
+    "The text asks for a specific date or age.",
+    "The text asks for the name of an organization, institution, or brand.",
+    "The text asks for the category or classification of an organization, institution, or brand.",
+    "The text asks for a concrete factual detail (abbreviation, entity, speed, date, or age).",
+    "The text does not ask for a reason, method, category, or proper name.",
+    "The text asks for a concrete object or abbreviation.",
+    "The text asks for a single-word translation of a word from one language to another.",
+    "The text asks for a temporal answer (date, time, or age).",
+    "The text asks for an explanatory answer (origin or reason).",
+    "The text requests a specific proper name (e.g., a school, college, or university).",
+    "The text requests the expansion of an abbreviation or the definition of a term.",
+    "The text asks for the name of a specific institution or substance.",
+    "The text asks for an abbreviation expansion or definition.",
+    "The text asks for an answer that is a specific named entity.",
+    "The text does not ask for an explanation, collection, or creative work.",
+    "The text asks for an explanation, definition, or origin of something.",
+    "The text does not ask for a specific named entity such as an object, procedure, substance, or scientific principle.",
+    "The text asks for a category or type of organization.",
+    "The text does not ask for a specific abbreviation or concrete entity."
+  ],
+  "head": {
+    "kind": "hgb",
+    "learning_rate": 0.12,
+    "l2_regularization": 0.01
+  }
+}

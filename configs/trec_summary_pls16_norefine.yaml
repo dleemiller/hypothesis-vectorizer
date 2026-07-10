@@ -1,0 +1,5 @@
+run_name: trec_summary_pls16_norefine_eval
+seed: 7
+data: {name: trec, train_size: 5452, val_size: 0, test_size: 2000}
+encoder: {model: dleemiller/finecat-nli-l, features: full}
+pool: {from_run: trec_summary_pls16_norefine, rounds: 0}
