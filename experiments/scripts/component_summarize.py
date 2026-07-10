@@ -71,7 +71,14 @@ def _name_components(components, task):
         "texts and LOW for the pole_low texts — i.e. state the DISTINCTION itself as a contrast "
         "('The text asks for X rather than Y'). Single sentence, verifiable from the text alone.",
     )
-    lm = dspy.LM(model="openrouter/deepseek/deepseek-v4-flash", max_tokens=8000, temperature=0.7)
+    lm = dspy.LM(
+        model="openrouter/deepseek/deepseek-v4-flash",
+        max_tokens=4000,
+        temperature=0.7,
+        extra_body={
+            "reasoning": {"enabled": False}
+        },  # naming is simple; skip reasoning tokens (Lee: output-heavy)
+    )
     predict = dspy.Predict(sig)
     named = []
     with dspy.context(lm=lm):
@@ -100,7 +107,14 @@ def _rehypothesize(components, named, task):
         "the contrast is really TWO independent properties, the 1-2 standalone affirmative "
         "hypotheses it splits into; else an empty list.",
     )
-    lm = dspy.LM(model="openrouter/deepseek/deepseek-v4-flash", max_tokens=8000, temperature=0.7)
+    lm = dspy.LM(
+        model="openrouter/deepseek/deepseek-v4-flash",
+        max_tokens=4000,
+        temperature=0.7,
+        extra_body={
+            "reasoning": {"enabled": False}
+        },  # naming is simple; skip reasoning tokens (Lee: output-heavy)
+    )
     predict = dspy.Predict(sig)
     out = []
     with dspy.context(lm=lm):

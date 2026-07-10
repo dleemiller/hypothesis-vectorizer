@@ -2293,3 +2293,9 @@ wrong — 6/7 were cache MISSES; I misread the runner printing "fitting CV-selec
 build_matrices scores (the CPU run was slowly SCORING, not head-fitting). Lesson: verify scores
 exist + a metrics.json was produced before claiming any result; the "fitting head" log line precedes
 scoring and must not be read as completion.
+
+## 2026-07-09 — k-sweep: PLS k=16 component-summary (does milder compression recover accuracy?)
+k=7 gave 0.910 (miss). k=16 ~= half the ~30 effective directions. PRE-REGISTERED: expect between
+0.910 (k=7) and 0.962 (full); success = >=0.94 (matches trec_full within ~0.02). Same source pool
+(trec_full 62) as k=7 for a clean sweep. Generate+refine+save 16 axes (network), GPU-score the new
+ones (Lee OK'd), cv head, one test eval.
